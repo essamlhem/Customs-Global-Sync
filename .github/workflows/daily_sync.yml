@@ -1,0 +1,30 @@
+name: Global_Sync_System
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *' # كل يوم الساعة 9 صباحاً بتوقيتك
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - run: pip install -r requirements.txt
+      - name: Run Scraper
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python Scraping.py
+      - name: Save State
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add knowledge_base.json
+          git commit -m "update database state" || exit 0
+          git push
