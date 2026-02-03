@@ -1,45 +1,68 @@
 import os
-import json
+import requests
+import pandas as pd
 from datetime import datetime
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
-from Brain import AcrossMENABrain
-import requests
 
+# إعدادات الأمان
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+ACROSS_MENA_TOKEN = os.getenv("SITE_TOKEN")
+ACROSS_MENA_API_URL = "https://across-mena.com/api/update-data"
 
-def send_to_telegram(message, file_path=None):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
-    if file_path:
-        with open(file_path, 'rb') as f:
-            requests.post(url + "sendDocument", data={'chat_id': CHAT_ID, 'caption': message}, files={'document': f})
-    else:
-        requests.post(url + "sendMessage", data={'chat_id': CHAT_ID, 'text': message})
+def send_telegram_notification(message):
+    """إرسال إشعار مختصر لتليجرام"""
+    if not BOT_TOKEN or not CHAT_ID: return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    try:
+        requests.post(url, data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
+    except Exception as e:
+        print(f"Telegram Notification Error: {e}")
+
+def sync_with_website(clean_data_list):
+    """مزامنة الداتا مع الموقع"""
+    if not ACROSS_MENA_TOKEN:
+        return False, "⚠️ بانتظار توكن الموقع"
+    
+    headers = {"Authorization": f"Bearer {ACROSS_MENA_TOKEN}", "Content-Type": "application/json"}
+    try:
+        response = requests.post(ACROSS_MENA_API_URL, json=clean_data_list, headers=headers)
+        if response.status_code in [200, 201]:
+            return True, "✅ تم التحديث بنجاح"
+        else:
+            return False, f"⚠️ فشل المزامنة (كود {response.status_code})"
+    except:
+        return False, "❌ خطأ في الاتصال بالموقع"
 
 def main():
     try:
-        # 1. جلب البيانات
+        # 1. المعالجة
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
-        
-        # 2. معالجة وتنظيف البيانات (من الملف المنفصل)
         processor = DataProcessor()
         df_clean = processor.process_data(raw_data)
         
-        # 3. حفظ النتائج
-        output_file = "customs_ai_ready.xlsx"
-        df_clean.to_excel(output_file, index=False)
+        # 2. تحديث الذاكرة
+        df_clean.to_json('knowledge_base.json', orient='records', force_ascii=False)
+        df_clean.to_excel("customs_ai_ready.xlsx", index=False)
         
-        with open("knowledge_base.json", "w", encoding="utf-8") as f:
-            json.dump(raw_data, f, ensure_ascii=False)
-            
-        # 4. إرسال التقرير
-        sync_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-        send_to_telegram(f"✅ نظام Across MENA المطور:\nتمت المزامنة والمعالجة بنجاح.\n⏰ {sync_time}", output_file)
+        # 3. المزامنة
+        web_status, status_msg = sync_with_website(df_clean.to_dict(orient='records'))
+        
+        # 4. إرسال الإشعار الصباحي فقط
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        report = (
+            f"☀️ **تقرير Across MENA الصباحي**\n\n"
+            f"📅 التاريخ: `{now}`\n"
+            f"📊 حالة الموقع: {status_msg}\n"
+            f"📦 عدد البنود المحدثة: {len(df_clean)}\n"
+            f"🛠️ تم تحديث الذاكرة والملفات بنجاح."
+        )
+        send_telegram_notification(report)
         
     except Exception as e:
-        send_to_telegram(f"❌ خطأ في النظام: {str(e)}")
+        send_telegram_notification(f"❌ حدث خطأ في النظام الصباحي:\n`{str(e)}`")
 
 if __name__ == "__main__":
     main()
