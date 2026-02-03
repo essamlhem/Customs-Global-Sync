@@ -6,7 +6,6 @@ class DataProcessor:
     @staticmethod
     def clean_description(text):
         if not text: return ""
-        # حذف الأرقام والرموز ليكون البحث دقيق
         clean = re.sub(r'\[.*?\]|\(.*?\)|\d+', '', text)
         return clean.strip().replace('  ', ' ')
 
@@ -16,14 +15,25 @@ class DataProcessor:
         match = re.search(r'\d{4,}', text)
         return match.group(0) if match else ""
 
+    # --- الميزة الجديدة: المصنف الذكي ---
+    @staticmethod
+    def classify_category(hs_code):
+        if not hs_code or len(hs_code) < 2: return "أخرى"
+        
+        # استخراج أول رقمين لتحديد القسم الكبير
+        chapter = hs_code[:2]
+        
+        categories = {
+            "01": "حيوانات حية", "02": "لحوم", "07": "خضروات", "08": "فواكه",
+            "61": "ألبسة وتريكو", "62": "ألبسة جاهزة", "64": "أحذية",
+            "84": "آلات ومعدات", "85": "أجهزة كهربائية", "87": "سيارات وقطعها",
+            "94": "أثاث ومفروشات"
+        }
+        return categories.get(chapter, "تصنيف عام جمركي")
+
     @staticmethod
     def get_stable_image_url(description):
-        if not description: return "https://via.placeholder.com/150"
-        
-        # تحويل الوصف لكلمات مفتاحية بسيطة
-        keywords = description.split(',')[0].replace(' ', ',')
-        # استخدام محرك Pixabay أو نظام بحث صور مستقر
-        # للتبسيط وضمان العمل، سنستخدم رابط بحث صور "Bing" المباشر لأنه يفتح دائماً
+        if not description: return ""
         query = urllib.parse.quote(description)
         return f"https://www.bing.com/images/search?q={query}"
 
@@ -37,7 +47,9 @@ class DataProcessor:
         df['hs_code'] = df['material'].apply(self.extract_hs_code)
         df['description_clean'] = df['material'].apply(self.clean_description)
         
-        # الرابط الجديد المستقر
+        # إضافة التصنيف الذكي بناءً على رقم البند
+        df['category'] = df['hs_code'].apply(self.classify_category)
+        
         df['image_search_link'] = df['description_clean'].apply(self.get_stable_image_url)
         df['ai_reference_link'] = df['hs_code'].apply(self.generate_global_link)
         
