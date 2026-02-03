@@ -1,15 +1,18 @@
 name: Across_MENA_AI_System
 
 on:
-  workflow_dispatch: # للتشغيل اليدوي في أي وقت
+  workflow_dispatch:
+    inputs:
+      search_query:
+        description: 'اكتب الكلمة اللي بدك تبحث عنها (اختياري)'
+        required: false
+        default: ''
   schedule:
-    - cron: '5 6 * * *' # يعمل تلقائياً الساعة 9:05 صباحاً بتوقيت سوريا/السعودية
+    - cron: '5 6 * * *'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
-    # إعطاء صلاحيات للنظام لتحديث الملفات داخل المستودع
     permissions:
       contents: write
 
@@ -31,15 +34,14 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        # تشغيل الملف الرئيسي الجديد
+          SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
+          SEARCH_INPUT: ${{ github.event.inputs.search_query }}
         run: python main.py
 
       - name: Sync Database State
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          # إضافة ملفات الذاكرة والنتائج للمستودع
           git add knowledge_base.json customs_ai_ready.xlsx
-          # عمل Commit إذا وجد تغيير، وإلا تخطي الخطوة
-          git commit -m "Auto-update: Customs Data & AI Processing [$(date)]" || exit 0
+          git commit -m "Auto-update: Customs Data [$(date)]" || exit 0
           git push
