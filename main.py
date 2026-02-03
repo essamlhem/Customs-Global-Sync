@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
+from Brain import AcrossMENABrain
 import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
