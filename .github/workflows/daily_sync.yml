@@ -1,14 +1,9 @@
-name: Across_MENA_AI_System
+name: Across_MENA_Daily_Sync
 
 on:
   workflow_dispatch:
-    inputs:
-      search_query:
-        description: 'اكتب الكلمة اللي بدك تبحث عنها (اختياري)'
-        required: false
-        default: ''
   schedule:
-    - cron: '5 6 * * *'
+    - cron: '5 6 * * *' # يومياً 9:05 صباحاً
 
 jobs:
   build:
@@ -35,13 +30,12 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
-          SEARCH_INPUT: ${{ github.event.inputs.search_query }}
         run: python main.py
 
-      - name: Sync Database State
+      - name: Commit Changes
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
+          git config --global user.name "Across MENA Bot"
+          git config --global user.email "bot@across-mena.com"
           git add knowledge_base.json customs_ai_ready.xlsx
-          git commit -m "Auto-update: Customs Data [$(date)]" || exit 0
+          git commit -m "Daily Sync Completed: $(date)" || exit 0
           git push
