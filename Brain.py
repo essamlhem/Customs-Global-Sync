@@ -1,5 +1,4 @@
 import json
-import pandas as pd
 
 class AcrossMENABrain:
     def __init__(self, data_file='knowledge_base.json'):
@@ -15,26 +14,25 @@ class AcrossMENABrain:
 
     def search(self, query):
         if not self.data:
-            return "عذراً عيسى، الذاكرة فارغة حالياً."
-
-        # البحث في الوصف أو التصنيف
+            return []
+        
+        # بحث مرن في الوصف والتصنيف
         results = [
             item for item in self.data 
             if query.lower() in str(item.get('material', '')).lower() 
             or query.lower() in str(item.get('category', '')).lower()
         ]
-        
-        return results[:5] # إعادة أول 5 نتائج فقط لضمان السرعة
+        return results[:5] # نرجع أول 5 نتائج بس عشان الرسالة ما تكون طويلة
 
     def format_answer(self, results):
         if not results:
             return "للأسف يا عيسى، ما لقيت معلومات عن طلبك بالداتا الحالية."
         
-        response = "🔍 **نتائج البحث من Across MENA:**\n\n"
+        response = "🔍 **نتائج البحث الذكي:**\n\n"
         for item in results:
             response += f"📦 *المادة:* {item.get('description_clean', 'غير معروف')}\n"
             response += f"📂 *التصنيف:* {item.get('category', 'عام')}\n"
-            response += f"💰 *السعر الكلي:* {item.get('total_price', 'غير متوفر')}\n"
-            response += f"🔗 [رابط الصورة]({item.get('image_search_link', '#')})\n"
+            response += f"💰 *السعر:* {item.get('total_price', 'غير متوفر')}\n"
+            response += f"🖼️ [عرض صورة المنتج]({item.get('image_search_link', '#')})\n"
             response += "------------------------\n"
         return response
