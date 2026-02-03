@@ -1,30 +1,45 @@
-name: Global_Sync_System
+name: Across_MENA_AI_System
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # للتشغيل اليدوي في أي وقت
   schedule:
-    - cron: '0 6 * * *' # كل يوم الساعة 9 صباحاً بتوقيتك
+    - cron: '5 6 * * *' # يعمل تلقائياً الساعة 9:05 صباحاً بتوقيت سوريا/السعودية
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    
+    # إعطاء صلاحيات للنظام لتحديث الملفات داخل المستودع
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - run: pip install -r requirements.txt
-      - name: Run Scraper
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas openpyxl
+
+      - name: Run Across MENA System
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: python Scraping.py
-      - name: Save State
+        # تشغيل الملف الرئيسي الجديد
+        run: python main.py
+
+      - name: Sync Database State
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add knowledge_base.json
-          git commit -m "update database state" || exit 0
+          # إضافة ملفات الذاكرة والنتائج للمستودع
+          git add knowledge_base.json customs_ai_ready.xlsx
+          # عمل Commit إذا وجد تغيير، وإلا تخطي الخطوة
+          git commit -m "Auto-update: Customs Data & AI Processing [$(date)]" || exit 0
           git push
