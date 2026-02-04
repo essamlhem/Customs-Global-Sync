@@ -12,7 +12,7 @@ SITE_URL = os.getenv("SITE_URL")
 SITE_TOKEN = os.getenv("SITE_TOKEN")
 
 def send_telegram(message, file_path=None):
-    """إرسال التقرير والملف لتليجرام"""
+    """إرسال التقرير والملف لتليجرام بنص نظيف"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     clean_message = message.replace("_", " ").replace("*", "")
     try:
@@ -28,7 +28,7 @@ def send_telegram(message, file_path=None):
         print(f"❌ Telegram Error: {e}")
 
 def post_to_website(file_path):
-    """الدالة التي تتوافق مع Configuration المبرمج الجديد"""
+    """رفع الملف مع معالجة أخطاء الوقت والاتصال"""
     if not SITE_URL or not SITE_TOKEN:
         return "⚠️ بيانات الموقع ناقصة"
 
@@ -36,11 +36,17 @@ def post_to_website(file_path):
     
     try:
         with open(file_path, 'rb') as f:
-            # استخدام التنسيق البسيط الذي طلبه المبرمج
             files = {'file': f}
             data = {'command': 'import_customs_excel'}
             
-            response = requests.post(SITE_URL, headers=headers, files=files, data=data)
+            # أضفنا timeout=300 (5 دقائق) للسماح للسيرفر بمعالجة البيانات الضخمة
+            response = requests.post(
+                SITE_URL, 
+                headers=headers, 
+                files=files, 
+                data=data,
+                timeout=300 
+            )
             
             print(f"🌐 Website Response: {response.status_code} - {response.text}")
             
@@ -48,28 +54,34 @@ def post_to_website(file_path):
                 return "✅ تم الرفع بنجاح"
             else:
                 return f"❌ فشل: {response.status_code} ({response.text[:30]})"
+                
+    except requests.exceptions.Timeout:
+        return "⏳ فشل: وقت مستقطع (السيرفر بطيء)"
+    except requests.exceptions.ConnectionError:
+        return "🔌 فشل: انقطع الاتصال (بسبب حجم الملف)"
     except Exception as e:
-        return f"❌ خطأ تقني: {e}"
+        return f"❌ خطأ تقني: {str(e)[:40]}"
 
 def main():
     print(f"🚀 بدء التحديث اليومي: {datetime.now().strftime('%H:%M:%S')}")
     try:
-        # 1. جلب البيانات
+        # 1. جلب البيانات من السورس
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
         
-        # 2. معالجة البيانات
+        # 2. معالجة البيانات وتحضيرها
         processor = DataProcessor()
         df = processor.process_data(raw_data)
         
-        # 3. حفظ ملف الإكسل
+        # 3. حفظ ملف الإكسل النهائي
         file_name = "Across_MENA_Daily_Report.xlsx"
         df.to_excel(file_name, index=False)
-        
-        # 4. الرفع للموقع (المرحلة التي تم تعديل السيرفر لها)
+        print(f"💾 تم تجهيز الملف. العدد الإجمالي: {len(df)}")
+
+        # 4. محاولة الرفع للموقع (مع صبر أطول على السيرفر)
         web_status = post_to_website(file_name)
         
-        # 5. التقرير النهائي
+        # 5. رسالة تليجرام النهائية
         report = (
             f"Across MENA Daily Update\n"
             f"Date: {datetime.now().strftime('%Y-%m-%d')}\n"
@@ -78,7 +90,7 @@ def main():
         )
         
         send_telegram(report, file_name)
-        print("🏁 تمت المهمة بنجاح.")
+        print("🏁 تمت المهمة.")
 
     except Exception as e:
         err = f"Main Error: {str(e)}"
