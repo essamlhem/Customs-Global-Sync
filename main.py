@@ -5,68 +5,89 @@ from datetime import datetime
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
 
-# الإعدادات
+# الإعدادات - تأكد أن الأسماء مطابقة لـ GitHub Secrets
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 SITE_URL = os.getenv("SITE_URL")
 SITE_TOKEN = os.getenv("SITE_TOKEN")
 
 def send_telegram(message, file_path=None):
+    """إرسال التقرير والملف لتليجرام بدون رموز معقدة"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
-    # تنظيف الرسالة من الرموز التي تسبب خطأ في تليجرام
     clean_message = message.replace("_", " ").replace("*", "")
     try:
         if file_path and os.path.exists(file_path):
-            r = requests.post(url + "sendDocument", 
-                              data={'chat_id': CHAT_ID, 'caption': clean_message}, 
-                              files={'document': open(file_path, 'rb')})
+            with open(file_path, 'rb') as f:
+                r = requests.post(url + "sendDocument", 
+                                  data={'chat_id': CHAT_ID, 'caption': clean_message}, 
+                                  files={'document': f})
         else:
             r = requests.post(url + "sendMessage", 
                               data={'chat_id': CHAT_ID, 'text': clean_message})
-        print(f"📡 Telegram Sync: {r.status_code}")
+        print(f"📡 Telegram Response: {r.status_code}")
     except Exception as e:
         print(f"❌ Telegram Error: {e}")
 
 def post_to_website(file_path):
+    """إرسال ملف الإكسل للموقع بطلب POST مباشر"""
+    if not SITE_URL or not SITE_TOKEN:
+        return "⚠️ بيانات الموقع ناقصة"
+
     headers = {"Authorization": f"Token {SITE_TOKEN}"}
     try:
         with open(file_path, 'rb') as f:
-            # تم تعديل الأمر ليتوافق مع طلب السيرفر بدقة
-            files = {'file': f}
-            data = {'command': 'importcustomsexcel'} # بدون _ وبدون s
-            r = requests.post(SITE_URL, headers=headers, files=files, data=data)
-            print(f"🌐 Website Sync: {r.status_code} - {r.text}")
-            return "✅ تم الرفع" if r.status_code in [200, 201] else f"❌ فشل: {r.status_code}"
+            # نحدد اسم الملف ونوعه لضمان قبول السيرفر له
+            files = {
+                'file': (file_path, f, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            }
+            
+            # محاولة إرسال الملف بدون 'data' إضافية أولاً
+            response = requests.post(SITE_URL, headers=headers, files=files)
+            
+            print(f"🌐 Website Response: {response.status_code} - {response.text}")
+            
+            if response.status_code in [200, 201]:
+                return "✅ تم الرفع بنجاح"
+            else:
+                return f"❌ فشل: {response.status_code}"
     except Exception as e:
         return f"❌ خطأ تقني: {e}"
 
 def main():
-    print(f"🚀 بدء التشغيل: {datetime.now()}")
+    print(f"🚀 بدء المهمة اليومية: {datetime.now().strftime('%H:%M:%S')}")
     try:
+        # 1. جلب البيانات
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
+        
+        # 2. معالجة البيانات
         processor = DataProcessor()
         df = processor.process_data(raw_data)
         
+        # 3. حفظ ملف الإكسل
         file_name = "Across_MENA_Daily_Report.xlsx"
         df.to_excel(file_name, index=False)
-        
-        # خطوة الرفع للموقع
+        print(f"💾 تم إنشاء الملف بنجاح. العدد: {len(df)}")
+
+        # 4. الرفع للموقع
         web_status = post_to_website(file_name)
         
-        # تجهيز رسالة بسيطة لتجنب أخطاء التنسيق
+        # 5. تجهيز التقرير المختصر لتليجرام
         report = (
-            f"Across MENA Update\n"
+            f"Across MENA Daily Update\n"
             f"Date: {datetime.now().strftime('%Y-%m-%d')}\n"
             f"Site Status: {web_status}\n"
             f"Items Count: {len(df)}"
         )
         
+        # 6. الإرسال
         send_telegram(report, file_name)
-        print("🏁 Done.")
+        print("🏁 انتهت العملية.")
+
     except Exception as e:
-        print(f"❌ Main Error: {e}")
-        send_telegram(f"Error: {str(e)}")
+        err = f"Main Error: {str(e)}"
+        print(f"❌ {err}")
+        send_telegram(err)
 
 if __name__ == "__main__":
     main()
