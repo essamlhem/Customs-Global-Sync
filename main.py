@@ -5,53 +5,63 @@ from datetime import datetime
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
 
+# الإعدادات من GitHub Secrets
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+SITE_URL = "https://across-mena.com/customs/upload-excel/"
+SITE_TOKEN = os.getenv("SITE_TOKEN")
 
-def send_to_telegram_with_file(message, file_path):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument"
+def send_telegram(message, file_path=None):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
+    if file_path:
+        with open(file_path, 'rb') as f:
+            requests.post(url + "sendDocument", data={'chat_id': CHAT_ID, 'caption': message, 'parse_mode': 'Markdown'}, files={'document': f})
+    else:
+        requests.post(url + "sendMessage", data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
+
+def post_to_website(file_path):
+    """إرسال ملف الإكسل عبر POST طلب للموقع"""
+    headers = {"Authorization": f"Token {SITE_TOKEN}"}
     try:
         with open(file_path, 'rb') as f:
-            payload = {'chat_id': CHAT_ID, 'caption': message, 'parse_mode': 'Markdown'}
-            files = {'document': f}
-            requests.post(url, data=payload, files=files)
+            # 'file' هو اسم الحقل الذي يتوقعه السيرفر عادةً في طلبات الـ POST للملفات
+            files = {'file': f}
+            response = requests.post(SITE_URL, headers=headers, files=files)
+            
+            if response.status_code in [200, 201]:
+                return f"✅ تم الرفع للموقع بنجاح (Status: {response.status_code})"
+            else:
+                return f"❌ فشل الرفع للموقع: {response.status_code} - {response.text[:100]}"
     except Exception as e:
-        print(f"Error sending to Telegram: {e}")
+        return f"❌ خطأ تقني في الإرسال للموقع: {str(e)}"
 
 def main():
     try:
-        # جلب ومعالجة البيانات
+        # 1. جلب البيانات ومعالجتها
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
-        
         processor = DataProcessor()
         df = processor.process_data(raw_data)
         
-        # حفظ الملفين
-        excel_name = "Across_MENA_Daily_Report.xlsx"
-        df.to_excel(excel_name, index=False)
+        # 2. حفظ النسخة اليومية الأحدث
+        file_name = "Across_MENA_Daily_Report.xlsx"
+        df.to_excel(file_name, index=False)
         df.to_json('knowledge_base.json', orient='records', force_ascii=False)
         
-        # إحصائيات الصور
-        total = len(df)
-        with_img = df[df['image_search_link'] != ""].shape[0]
+        # 3. إرسال ملف الإكسل للموقع (الخطوة الجديدة)
+        web_status = post_to_website(file_name)
         
-        # رسالة التقرير
-        report_msg = (
-            f"☀️ **تقرير Across MENA للمطابقة**\n"
+        # 4. إرسال التقرير النهائي لك على تليجرام
+        report = (
+            f"🚀 **تحديث Across MENA اليومي**\n"
             f"📅 التاريخ: `{datetime.now().strftime('%Y-%m-%d')}`\n\n"
-            f"✅ إجمالي المواد: `{total}`\n"
-            f"🖼️ مواد بروابط صور: `{with_img}`\n"
-            f"⚠️ مواد مفقودة: `{total - with_img}`\n\n"
-            f"📌 افتح ملف الإكسل المرفق لمراجعة دقة الصور عبر الروابط."
+            f"🌍 حالة الموقع: {web_status}\n"
+            f"📦 إجمالي البنود: `{len(df)}`"
         )
-        
-        # تنفيذ الإرسال
-        send_to_telegram_with_file(report_msg, excel_name)
-        
+        send_telegram(report, file_name)
+
     except Exception as e:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
-                      data={'chat_id': CHAT_ID, 'text': f"❌ خطأ في السيستم: {str(e)}"})
+        send_telegram(f"❌ خطأ عام: {str(e)}")
 
 if __name__ == "__main__":
     main()
