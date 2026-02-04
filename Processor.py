@@ -4,53 +4,42 @@ import urllib.parse
 
 class DataProcessor:
     @staticmethod
-    def clean_description(text):
+    def clean_for_search(text):
         if not text: return ""
-        clean = re.sub(r'\[.*?\]|\(.*?\)|\d+', '', text)
-        return clean.strip().replace('  ', ' ')
-
-    @staticmethod
-    def extract_hs_code(text):
-        if not text: return ""
-        match = re.search(r'\d{4,}', text)
-        return match.group(0) if match else ""
-
-    # --- الميزة الجديدة: المصنف الذكي ---
-    @staticmethod
-    def classify_category(hs_code):
-        if not hs_code or len(hs_code) < 2: return "أخرى"
-        
-        # استخراج أول رقمين لتحديد القسم الكبير
-        chapter = hs_code[:2]
-        
-        categories = {
-            "01": "حيوانات حية", "02": "لحوم", "07": "خضروات", "08": "فواكه",
-            "61": "ألبسة وتريكو", "62": "ألبسة جاهزة", "64": "أحذية",
-            "84": "آلات ومعدات", "85": "أجهزة كهربائية", "87": "سيارات وقطعها",
-            "94": "أثاث ومفروشات"
-        }
-        return categories.get(chapter, "تصنيف عام جمركي")
+        # إزالة الرموز والكلمات التي لا تهم محرك البحث عن الصور
+        clean = re.sub(r'\[.*?\]|\(.*?\)|\d+|/|-', '', text)
+        # إزالة كلمات جمركية متكررة قد تشوش البحث
+        exclude_words = ['بند', 'تعريفة', 'رسوم', 'كيلو', 'كغ', 'طن']
+        words = clean.split()
+        filtered_words = [w for w in words if w not in exclude_words]
+        return " ".join(filtered_words).strip()
 
     @staticmethod
     def get_stable_image_url(description):
         if not description: return ""
-        query = urllib.parse.quote(description)
-        return f"https://www.bing.com/images/search?q={query}"
-
-    @staticmethod
-    def generate_global_link(hs_code):
-        if not hs_code: return ""
-        return f"https://globaltradehelpdesk.org/ar/resources/search-hs-code?code={hs_code}"
+        # استخدام الاسم المنظف للبحث
+        query = DataProcessor.clean_for_search(description)
+        if not query: return ""
+        encoded_query = urllib.parse.quote(query)
+        # رابط مباشر لنتائج صور Bing
+        return f"https://www.bing.com/images/search?q={encoded_query}"
 
     def process_data(self, raw_data):
         df = pd.DataFrame(raw_data)
-        df['hs_code'] = df['material'].apply(self.extract_hs_code)
-        df['description_clean'] = df['material'].apply(self.clean_description)
+        # استخراج الـ HS Code
+        df['hs_code'] = df['material'].apply(lambda x: re.search(r'\d{4,}', str(x)).group(0) if re.search(r'\d{4,}', str(x)) else "")
+        # تنظيف الوصف للعرض
+        df['description_clean'] = df['material'].apply(lambda x: re.sub(r'\[.*?\]|\d+', '', str(x)).strip())
+        # توليد روابط الصور بناءً على الوصف المنظف للبحث
+        df['image_search_link'] = df['material'].apply(self.get_stable_image_url)
         
-        # إضافة التصنيف الذكي بناءً على رقم البند
+        # تصنيف تلقائي بسيط
         df['category'] = df['hs_code'].apply(self.classify_category)
-        
-        df['image_search_link'] = df['description_clean'].apply(self.get_stable_image_url)
-        df['ai_reference_link'] = df['hs_code'].apply(self.generate_global_link)
-        
         return df
+
+    @staticmethod
+    def classify_category(hs_code):
+        if not hs_code: return "أخرى"
+        chapter = hs_code[:2]
+        categories = {"01": "حيوانات", "07": "خضروات", "61": "ملابس", "84": "آلات"}
+        return categories.get(chapter, "تصنيف عام")
