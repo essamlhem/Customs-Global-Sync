@@ -1,17 +1,18 @@
 name: Across_MENA_Daily_Sync
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # للتشغيل اليدوي بضغطة زر
   schedule:
-    - cron: '30 5 * * *'
+    - cron: '30 5 * * *' # يشتغل الساعة 8:30 أو 9:00 صباحاً بتوقيت مكة
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # --- إضافة الصلاحيات هنا ---
+    
+    # إعطاء صلاحية الكتابة لحفظ ملف الـ JSON المحدث في المستودع
     permissions:
-      contents: write 
-    # -----------------------
+      contents: write
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -28,15 +29,17 @@ jobs:
 
       - name: Run Across MENA System
         env:
+          # هدول بجيبهم من الـ Secrets اللي حطيناهم بالإعدادات
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
           SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
+          SITE_URL: "https://across-mena.com/customs/upload-excel/"
         run: python main.py
 
-      - name: Commit Changes
+      - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add knowledge_base.json customs_ai_ready.xlsx
-          git commit -m "Daily Sync Completed" || exit 0
+          git add knowledge_base.json Across_MENA_Daily_Report.xlsx
+          git commit -m "Auto-update: Data processed and synced to site" || exit 0
           git push
