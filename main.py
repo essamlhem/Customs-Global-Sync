@@ -6,91 +6,94 @@ from Scraper import SupabaseScraper
 from Processor import DataProcessor
 from Brain import AcrossMENABrain
 
-# الإعدادات - يتم سحبها من GitHub Secrets
+# إعدادات البيئة
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 SITE_URL = os.getenv("SITE_URL")
 SITE_TOKEN = os.getenv("SITE_TOKEN")
 
 def send_telegram(message, file_path=None):
-    """إرسال التقرير والملف إلى تليجرام"""
+    """إرسال التقرير مع طباعة النتيجة للتتبع"""
+    if not BOT_TOKEN or not CHAT_ID:
+        print("❌ خطأ: BOT_TOKEN أو CHAT_ID مفقود!")
+        return
+
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     try:
-        if file_path:
+        if file_path and os.path.exists(file_path):
             with open(file_path, 'rb') as f:
-                requests.post(url + "sendDocument", 
-                              data={'chat_id': CHAT_ID, 'caption': message, 'parse_mode': 'Markdown'}, 
-                              files={'document': f})
+                r = requests.post(url + "sendDocument", 
+                                  data={'chat_id': CHAT_ID, 'caption': message, 'parse_mode': 'Markdown'}, 
+                                  files={'document': f})
         else:
-            requests.post(url + "sendMessage", 
-                          data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
+            r = requests.post(url + "sendMessage", 
+                              data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
+        
+        print(f"📡 Telegram Sync: {r.status_code} - {r.text}")
     except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"❌ Telegram Exception: {str(e)}")
 
 def post_to_website(file_path):
-    """إرسال ملف الإكسل للموقع مع الأمر المطلوب"""
-    # نستخدم "Token" لأن المبرمج وضحه في السكريبت الخاص به
+    """إرسال الملف للموقع مع الأمر المطلوب"""
+    if not SITE_URL or not SITE_TOKEN:
+        return "⚠️ بيانات الموقع مفقودة (URL/Token)"
+
     headers = {"Authorization": f"Token {SITE_TOKEN}"}
     try:
         with open(file_path, 'rb') as f:
-            # الحقول المطلوبة للسيرفر بناءً على الخطأ السابق
             files = {'file': f}
-            data = {'command': 'importcustomsexcel'} # هذا السطر لحل مشكلة Unknown command
+            data = {'command': 'importcustomsexcel'}
+            r = requests.post(SITE_URL, headers=headers, files=files, data=data)
+            print(f"🌐 Website Sync: {r.status_code} - {r.text}")
             
-            response = requests.post(SITE_URL, headers=headers, files=files, data=data)
-            
-            if response.status_code in [200, 201]:
-                return f"✅ تم الرفع للموقع بنجاح"
-            else:
-                # نرجع تفاصيل الخطأ إذا فشل مرة أخرى
-                return f"❌ فشل الرفع: {response.status_code} - {response.text[:100]}"
+            if r.status_code in [200, 201]:
+                return "✅ تم الرفع للموقع بنجاح"
+            return f"❌ فشل الرفع: {r.status_code}"
     except Exception as e:
-        return f"❌ خطأ تقني في الربط: {str(e)}"
+        return f"❌ خطأ تقني بالربط: {str(e)}"
 
 def main():
+    print(f"🚀 بدء التشغيل: {datetime.now()}")
     try:
-        # 1. جلب البيانات من Supabase
+        # 1. جلب ومعالجة
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
-        
-        # 2. معالجة البيانات (تنظيف، HS Code، روابط صور)
         processor = DataProcessor()
         df = processor.process_data(raw_data)
         
-        # 3. حفظ الملفات (Excel و JSON للذاكرة)
+        # 2. حفظ
         file_name = "Across_MENA_Daily_Report.xlsx"
         df.to_excel(file_name, index=False)
         df.to_json('knowledge_base.json', orient='records', force_ascii=False)
+        print(f"💾 تم حفظ الملفات. إجمالي المواد: {len(df)}")
+
+        # 3. الرفع للموقع
+        web_status = post_to_website(file_name)
         
-        # 4. تحليل البيانات عبر الـ Brain (اختياري للتقرير)
+        # 4. تجهيز التقرير
         brain = AcrossMENABrain()
         stats = brain.get_stats()
         
-        # 5. محاولة الرفع للموقع (POST)
-        web_status = post_to_website(file_name)
-        
-        # 6. تجهيز رسالة التقرير النهائي
         report = (
-            f"🚀 **تحديث Across MENA الذكي**\n"
+            f"🚀 **تحديث Across MENA**\n"
             f"📅 التاريخ: `{datetime.now().strftime('%Y-%m-%d')}`\n\n"
             f"🌐 **حالة الموقع:** {web_status}\n"
-            f"📦 **إجمالي المواد:** `{len(df)}` بند\n"
-            f"🧠 **أهم التصنيفات:**\n"
+            f"📦 **المواد:** `{len(df)}` بند\n"
         )
         
-        # إضافة أهم تصنيفين من الـ Brain للتقرير
         if isinstance(stats, dict):
             sorted_cats = sorted(stats['categories_breakdown'].items(), key=lambda x: x[1], reverse=True)[:2]
             for cat, count in sorted_cats:
-                report += f"• {cat}: `{count}` بند\n"
+                report += f"• {cat}: `{count}`\n"
         
-        report += "\n👇 الملف المرفق يحتوي على كافة البيانات المحدثة."
-        
-        # 7. الإرسال لتليجرام
+        # 5. الإرسال
         send_telegram(report, file_name)
+        print("🏁 تمت المهمة بنجاح.")
 
     except Exception as e:
-        send_telegram(f"❌ خطأ عام في النظام: {str(e)}")
+        error_msg = f"❌ خطأ عام: {str(e)}"
+        print(error_msg)
+        send_telegram(error_msg)
 
 if __name__ == "__main__":
     main()
