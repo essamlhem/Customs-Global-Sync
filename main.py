@@ -30,7 +30,6 @@ def send_telegram(message, file_path=None):
         print(f"❌ Telegram Error: {e}")
 
 def post_to_website(file_path):
-    """إرسال الملف للموقع مع تجربة الأمر الأكثر دقة"""
     if not SITE_URL or not SITE_TOKEN:
         return "⚠️ بيانات الموقع ناقصة"
 
