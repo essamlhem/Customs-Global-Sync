@@ -1,13 +1,17 @@
 name: Across_MENA_Daily_Sync
 
 on:
-  workflow_dispatch: # هذا يخلي الزر يظهر للتشغيل اليدوي
+  workflow_dispatch:
   schedule:
-    - cron: '5 6 * * *' # توقيت العالمي (يعادل 9:05 صباحاً بتوقيت مكة)
+    - cron: '30 5 * * *'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # --- إضافة الصلاحيات هنا ---
+    permissions:
+      contents: write 
+    # -----------------------
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -31,8 +35,8 @@ jobs:
 
       - name: Commit Changes
         run: |
-          git config --global user.name "Across MENA Bot"
-          git config --global user.email "bot@across-mena.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add knowledge_base.json customs_ai_ready.xlsx
           git commit -m "Daily Sync Completed" || exit 0
           git push
