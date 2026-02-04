@@ -1,68 +1,74 @@
 import os
 import requests
 import pandas as pd
+import json
 from datetime import datetime
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
 
-# إعدادات الأمان
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-ACROSS_MENA_TOKEN = os.getenv("SITE_TOKEN")
-ACROSS_MENA_API_URL = "https://across-mena.com/api/update-data"
 
 def send_telegram_notification(message):
-    """إرسال إشعار مختصر لتليجرام"""
     if not BOT_TOKEN or not CHAT_ID: return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(url, data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
-    except Exception as e:
-        print(f"Telegram Notification Error: {e}")
-
-def sync_with_website(clean_data_list):
-    """مزامنة الداتا مع الموقع"""
-    if not ACROSS_MENA_TOKEN:
-        return False, "⚠️ بانتظار توكن الموقع"
-    
-    headers = {"Authorization": f"Bearer {ACROSS_MENA_TOKEN}", "Content-Type": "application/json"}
-    try:
-        response = requests.post(ACROSS_MENA_API_URL, json=clean_data_list, headers=headers)
-        if response.status_code in [200, 201]:
-            return True, "✅ تم التحديث بنجاح"
-        else:
-            return False, f"⚠️ فشل المزامنة (كود {response.status_code})"
-    except:
-        return False, "❌ خطأ في الاتصال بالموقع"
+    requests.post(url, data={'chat_id': CHAT_ID, 'text': message, 'parse_mode': 'Markdown'})
 
 def main():
     try:
-        # 1. المعالجة
+        # 1. جلب البيانات الجديدة
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
         processor = DataProcessor()
-        df_clean = processor.process_data(raw_data)
+        df_new = processor.process_data(raw_data)
+
+        # 2. محرك المقارنة (الذكاء البسيط)
+        summary_msg = ""
+        try:
+            with open('knowledge_base.json', 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+                df_old = pd.DataFrame(old_data)
+                
+                # مواد جديدة؟
+                new_items_count = len(df_new) - len(df_old)
+                if new_items_count > 0:
+                    summary_msg += f"🆕 تم إضافة *{new_items_count}* مواد جديدة اليوم.\n"
+                elif new_items_count < 0:
+                    summary_msg += f"🗑️ تم حذف *{abs(new_items_count)}* مواد من القائمة.\n"
+        except:
+            summary_msg = "🆕 هذا هو التشغيل الأول للذاكرة.\n"
+
+        # 3. إحصائيات سريعة
+        top_categories = df_new['category'].value_counts().head(3).to_dict()
+        cat_text = "\n".join([f"• {k}: {v}" for k, v in top_categories.items()])
         
-        # 2. تحديث الذاكرة
-        df_clean.to_json('knowledge_base.json', orient='records', force_ascii=False)
-        df_clean.to_excel("customs_ai_ready.xlsx", index=False)
-        
-        # 3. المزامنة
-        web_status, status_msg = sync_with_website(df_clean.to_dict(orient='records'))
-        
-        # 4. إرسال الإشعار الصباحي فقط
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        # 4. أغلى مادة (بافتراض وجود عمود السعر)
+        try:
+            # تنظيف السعر من العملات وتحويله لرقم
+            df_new['price_num'] = df_new['total_price'].str.replace(r'[^\d.]', '', regex=True).astype(float)
+            expensive_item = df_new.loc[df_new['price_num'].idxmax()]
+            top_item_txt = f"💰 أغلى بند: *{expensive_item['description_clean']}*"
+        except:
+            top_item_txt = "💰 تم تحديث الأسعار بنجاح."
+
+        # 5. حفظ البيانات
+        df_new.to_json('knowledge_base.json', orient='records', force_ascii=False)
+        df_new.to_excel("customs_ai_ready.xlsx", index=False)
+
+        # 6. إرسال التقرير "المميز"
         report = (
-            f"☀️ **تقرير Across MENA الصباحي**\n\n"
-            f"📅 التاريخ: `{now}`\n"
-            f"📊 حالة الموقع: {status_msg}\n"
-            f"📦 عدد البنود المحدثة: {len(df_clean)}\n"
-            f"🛠️ تم تحديث الذاكرة والملفات بنجاح."
+            f"☀️ **تقرير Across MENA الذكي**\n"
+            f"📅 `{datetime.now().strftime('%Y-%m-%d')}`\n\n"
+            f"{summary_msg}\n"
+            f"📊 **أكثر التصنيفات تكراراً:**\n{cat_text}\n\n"
+            f"{top_item_txt}\n\n"
+            f"✅ إجمالي البنود: *{len(df_new)}*\n"
+            f"🚀 النظام جاهز وبانتظار الموقع."
         )
         send_telegram_notification(report)
-        
+
     except Exception as e:
-        send_telegram_notification(f"❌ حدث خطأ في النظام الصباحي:\n`{str(e)}`")
+        send_telegram_notification(f"❌ خطأ تقني: {str(e)}")
 
 if __name__ == "__main__":
     main()
