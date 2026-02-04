@@ -2,6 +2,7 @@ import os
 import requests
 import pandas as pd
 from datetime import datetime
+import time
 from Scraper import SupabaseScraper
 from Processor import DataProcessor
 
@@ -12,7 +13,7 @@ SITE_URL = os.getenv("SITE_URL")
 SITE_TOKEN = os.getenv("SITE_TOKEN")
 
 def send_telegram(message, file_path=None):
-    """إرسال التقرير والملف لتليجرام"""
+    """إرسال التقرير لتليجرام"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
     clean_message = message.replace("_", " ").replace("*", "")
     try:
@@ -28,7 +29,7 @@ def send_telegram(message, file_path=None):
         print(f"❌ Telegram Error: {e}")
 
 def post_to_website(file_path):
-    """رفع الملف للموقع مع انتظار طويل للمعالجة"""
+    """رفع ملف صغير (Chunk) للموقع"""
     if not SITE_URL or not SITE_TOKEN:
         return "⚠️ بيانات الموقع ناقصة"
 
@@ -39,75 +40,79 @@ def post_to_website(file_path):
             files = {'file': f}
             data = {'command': 'import_customs_excel'}
             
-            # ننتظر السيرفر حتى 5 دقائق (300 ثانية)
             response = requests.post(
                 SITE_URL, 
                 headers=headers, 
                 files=files, 
                 data=data,
-                timeout=300 
+                timeout=120 # وقت كافٍ لملف صغير
             )
             
-            print(f"🌐 Website Response: {response.status_code} - {response.text}")
-            
             if response.status_code in [200, 201]:
-                return "✅ تم الرفع بنجاح"
+                return "✅ نجاح"
             else:
-                return f"❌ فشل السيرفر: {response.status_code}"
-                
-    except requests.exceptions.Timeout:
-        return "⏳ وقت مستقطع (السيرفر بطيء)"
+                return f"❌ فشل ({response.status_code})"
     except Exception as e:
-        return f"❌ خطأ اتصال: {str(e)[:30]}"
+        return f"❌ خطأ: {str(e)[:30]}"
 
 def main():
-    print(f"🚀 بدء التحديث السريع: {datetime.now().strftime('%H:%M:%S')}")
+    print(f"🚀 بدء التحديث بنظام الدفعات: {datetime.now().strftime('%H:%M:%S')}")
     try:
-        # 1. جلب البيانات من السورس (Supabase)
+        # 1. جلب البيانات
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
         
-        # 2. معالجة البيانات (تنظيف وترتيب)
+        # 2. معالجة البيانات
         processor = DataProcessor()
         df = processor.process_data(raw_data)
         
-        # --- [تحسين الأداء لسرعة السيرفر] ---
-        # حذف الأعمدة الفارغة تماماً (التي لا تحتوي على أي داتا) لتقليل حجم المعالجة
-        initial_cols = len(df.columns)
-        df = df.dropna(how='all', axis=1)
+        # 3. تقسيم البيانات (كل دفعة 1000 مادة)
+        chunk_size = 1000
+        total_rows = len(df)
+        chunks = [df[i:i + chunk_size] for i in range(0, total_rows, chunk_size)]
         
-        # توحيد التنسيق لنصوص صافية لتسريع قراءة السيرفر للبيانات
-        for col in df.columns:
-            if df[col].dtype == 'object':
-                df[col] = df[col].astype(str).replace('nan', '')
+        print(f"📦 إجمالي المواد: {total_rows} | عدد الدفعات: {len(chunks)}")
 
-        file_name = "Across_MENA_Daily_Report.xlsx"
-        
-        # حفظ الملف بمحرك سريع وبدون تنسيقات معقدة
-        df.to_excel(file_name, index=False, engine='openpyxl')
-        
-        file_size = os.path.getsize(file_name) / 1024
-        print(f"💾 تم تجهيز ملف 'خفيف'. الحجم: {file_size:.2f} KB | الأعمدة: {len(df.columns)}")
+        success_count = 0
+        for idx, chunk_df in enumerate(chunks):
+            chunk_file = f"chunk_{idx+1}.xlsx"
+            # حفظ الدفعة كملف إكسل مؤقت
+            chunk_df.to_excel(chunk_file, index=False, engine='openpyxl')
+            
+            print(f"📤 رفع الدفعة {idx+1}/{len(chunks)}...")
+            status = post_to_website(chunk_file)
+            
+            if "✅" in status:
+                success_count += 1
+                print(f"✅ الدفعة {idx+1} اكتملت.")
+            else:
+                print(f"❌ الدفعة {idx+1} فشلت: {status}")
+            
+            # حذف الملف المؤقت فوراً
+            if os.path.exists(chunk_file):
+                os.remove(chunk_file)
+            
+            # انتظار بسيط بين الدفعات لراحة السيرفر
+            time.sleep(2)
 
-        # 4. الرفع للموقع (المرحلة الحرجة)
-        web_status = post_to_website(file_name)
+        # 4. التقرير النهائي
+        final_result = "✅ الكل تم بنجاح" if success_count == len(chunks) else f"⚠️ تم رفع {success_count}/{len(chunks)}"
         
-        # 5. إرسال التقرير النهائي لتليجرام
         report = (
-            f"Across MENA Speed Update\n"
+            f"Across MENA Batch Update\n"
             f"Date: {datetime.now().strftime('%Y-%m-%d')}\n"
-            f"Status: {web_status}\n"
-            f"Processed: {len(df)} items\n"
-            f"File Size: {file_size:.1f} KB"
+            f"Final Status: {final_result}\n"
+            f"Total Items: {total_rows}\n"
+            f"Chunks Processed: {len(chunks)}"
         )
         
-        send_telegram(report, file_name)
-        print("🏁 تمت المهمة بنجاح.")
+        send_telegram(report)
+        print("🏁 انتهت العملية.")
 
     except Exception as e:
-        error_msg = f"❌ Main Error: {str(e)}"
-        print(error_msg)
-        send_telegram(error_msg)
+        err = f"❌ Main Error: {str(e)}"
+        print(err)
+        send_telegram(err)
 
 if __name__ == "__main__":
     main()
