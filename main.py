@@ -25,35 +25,44 @@ def post_to_website(file_path):
     headers = {"Authorization": f"Token {SITE_TOKEN}"}
     try:
         with open(file_path, 'rb') as f:
-            # رجعنا لصيغة Excel لأن السيرفر أعطى 400 على الـ CSV
-            files = {'file': (file_path, f, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}
+            files = {'file': (file_path, f, 'text/csv')}
             data = {'command': 'import_customs_excel'}
-            response = requests.post(SITE_URL, headers=headers, files=files, data=data, timeout=300)
-            
-            if response.status_code in [200, 201]:
-                return "✅ تم الرفع بنجاح"
-            else:
-                return f"❌ فشل: {response.status_code} ({response.text[:30]})"
-    except Exception as e: return f"❌ خطأ: {str(e)[:30]}"
+            response = requests.post(SITE_URL, headers=headers, files=files, data=data, timeout=600)
+            return "✅ تم التحديث بنجاح" if response.status_code in [200, 201] else f"❌ فشل: {response.status_code}"
+    except Exception as e: return f"❌ خطأ اتصال: {str(e)[:30]}"
 
 def main():
+    print(f"🚀 بدء الفحص اليومي: {datetime.now().strftime('%H:%M')}")
     try:
         scraper = SupabaseScraper()
-        df = DataProcessor().process_data(scraper.fetch_raw_data())
+        raw_data = scraper.fetch_raw_data()
         
-        # تحسين: حذف الأعمدة الفارغة تماماً لتقليل الحجم
-        df = df.dropna(how='all', axis=1)
+        # إذا كانت البيانات فارغة أو لا يوجد تحديث (حسب منطق السكرابر عندك)
+        if not raw_data or len(raw_data) == 0:
+            send_telegram("☕ صباح الخير عيسى. فحصت السوبابيس اليوم وما لقيت أي تحديثات جديدة، لهيك ما رفعنا شي عالموقع.")
+            return
 
-        file_name = "Across_MENA_Update.xlsx"
-        # حفظ بأعلى ضغط ممكن للإكسل
-        df.to_excel(file_name, index=False, engine='openpyxl')
+        processor = DataProcessor()
+        df = processor.process_data(raw_data)
         
-        file_size = os.path.getsize(file_name) / 1024
+        # حفظ الملف CSV
+        file_name = "Across_MENA_Full_Data.csv"
+        df.to_csv(file_name, index=False, encoding='utf-8-sig')
+        
+        # الرفع للموقع
         web_status = post_to_website(file_name)
         
-        report = f"Across MENA Update\nStatus: {web_status}\nItems: {len(df)}\nSize: {file_size:.1f} KB"
+        # التقرير اليومي
+        report = (
+            f"📢 تقرير التحديث اليومي\n"
+            f"الوضع: {web_status}\n"
+            f"عدد المواد المرفوعة: {len(df)}\n"
+            f"التاريخ: {datetime.now().strftime('%Y-%m-%d')}"
+        )
         send_telegram(report, file_name)
-    except Exception as e: send_telegram(f"Error: {e}")
+
+    except Exception as e:
+        send_telegram(f"❌ خطأ في النظام: {str(e)}")
 
 if __name__ == "__main__":
     main()
