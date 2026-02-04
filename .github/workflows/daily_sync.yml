@@ -1,42 +1,42 @@
-name: Across_MENA_Daily_Sync
+name: Across MENA Daily Automation
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '30 5 * * *'
+    # يشتغل كل يوم الساعة 05:00 بتوقيت UTC (يعني 08:00 صباحاً بتوقيت مكة)
+    - cron: '0 5 * * *'
+  
+  # يسمح لك بتشغيل السكريبت يدوياً من صفحة Actions في أي وقت
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout Repository
+      # 1. جلب الكود من المستودع
+      - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. تثبيت لغة بايثون
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install Dependencies
+      # 3. تثبيت المكتبات اللازمة
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests pandas openpyxl
+          pip install pandas requests openpyxl supabase
 
-      - name: Run Across MENA System
+      # 4. تشغيل السكريبت الأساسي
+      - name: Run main script
         env:
+          # ربط المتغيرات بـ GitHub Secrets (تأكد إنك ضفتهم بالاعدادات)
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          SITE_URL: ${{ secrets.SITE_URL }}
           SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
-          SITE_URL: "https://across-mena.com/customs/upload-excel/"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python main.py
-
-      - name: Commit and Push Changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add knowledge_base.json Across_MENA_Daily_Report.xlsx
-          git commit -m "Auto-update: Data processed and synced" || exit 0
-          git push
