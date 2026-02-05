@@ -1,42 +1,36 @@
-name: Across MENA Daily Automation
+name: Daily Sync and Image Search
 
 on:
   schedule:
-    # يشتغل كل يوم الساعة 05:00 بتوقيت UTC (يعني 08:00 صباحاً بتوقيت مكة)
+    # يشتغل الساعة 8 صباحاً بتوقيت مكة (5 UTC)
     - cron: '0 5 * * *'
-  
-  # يسمح لك بتشغيل السكريبت يدوياً من صفحة Actions في أي وقت
-  workflow_dispatch:
+  workflow_dispatch: # زر لتشغيل الكود يدوياً
 
 jobs:
-  build:
+  run-sync:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. جلب الكود من المستودع
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
-      # 2. تثبيت لغة بايثون
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      # 3. تثبيت المكتبات اللازمة
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas requests openpyxl supabase
+      # تفعيل ميزة الذاكرة لحفظ روابط الصور بين كل تشغيل والتالي
+      - name: Cache Image Links
+        uses: actions/cache@v3
+        with:
+          path: images_cache.json
+          key: ${{ runner.os }}-images-v1
 
-      # 4. تشغيل السكريبت الأساسي
-      - name: Run main script
+      - name: Install Dependencies
+        run: pip install pandas requests
+
+      - name: Run Main Script
         env:
-          # ربط المتغيرات بـ GitHub Secrets (تأكد إنك ضفتهم بالاعدادات)
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-          SITE_URL: ${{ secrets.SITE_URL }}
-          SITE_TOKEN: ${{ secrets.SITE_TOKEN }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # إذا بدك ترفع للموقع مباشرة ضيف SITE_URL و SITE_TOKEN هنا
         run: python main.py
