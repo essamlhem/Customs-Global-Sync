@@ -1,92 +1,108 @@
 import os
 import requests
 import pandas as pd
-import json # لإضافة تنسيق المصفوفة (Array)
+import json
+import time
 from datetime import datetime
 from Scraper import SupabaseScraper
-from Processor import DataProcessor
 
-# الإعدادات
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
-SITE_URL = os.getenv("SITE_URL")
-SITE_TOKEN = os.getenv("SITE_TOKEN")
+# ملف الذاكرة لحفظ الروابط المسحوبة سابقاً
+CACHE_FILE = "images_cache.json"
 
-def send_telegram(message, file_path=None):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/"
-    try:
-        if file_path and os.path.exists(file_path):
-            with open(file_path, 'rb') as f:
-                requests.post(url + "sendDocument", data={'chat_id': CHAT_ID, 'caption': message}, files={'document': f})
-        else:
-            requests.post(url + "sendMessage", data={'chat_id': CHAT_ID, 'text': message})
-    except Exception as e: print(f"❌ Telegram Error: {e}")
+def load_cache():
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except: return {}
+    return {}
 
-def post_to_website(file_path):
-    headers = {"Authorization": f"Token {SITE_TOKEN}"}
-    try:
-        with open(file_path, 'rb') as f:
-            files = {'file': (file_path, f, 'text/csv')}
-            data = {'command': 'import_customs_excel'}
-            response = requests.post(SITE_URL, headers=headers, files=files, data=data, timeout=600)
-            return "✅ تم الرفع بنجاح" if response.status_code in [200, 201] else f"❌ فشل: {response.status_code}"
-    except Exception as e: return f"❌ خطأ اتصال: {str(e)[:30]}"
+def save_cache(cache):
+    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, ensure_ascii=False, indent=4)
 
 def main():
-    print(f"🚀 بدء التحديث (نظام مصفوفة الصور): {datetime.now().strftime('%H:%M')}")
+    print(f"🚀 بدء المعالجة: {datetime.now().strftime('%H:%M')}")
     try:
+        # 1. تحميل الذاكرة وجلب البيانات
+        image_cache = load_cache()
         scraper = SupabaseScraper()
         raw_data = scraper.fetch_raw_data()
         
         if not raw_data:
-            send_telegram("☕ صباح الخير عيسى. لا توجد تحديثات اليوم.")
+            print("⚠️ لا توجد بيانات في Supabase")
             return
 
-        processor = DataProcessor()
-        df = processor.process_data(raw_data)
+        final_list = []
+        new_search_count = 0
 
-        # --- [ تعديل الصور لتصبح مصفوفة ] ---
+        # 2. معالجة الصور لكل منتج
+        for item in raw_data:
+            # نستخدم الـ HS Code أو الموديل كمفتاح فريد في الذاكرة
+            item_id = str(item.get('hs_code', item.get('model', '')))
+            
+            if item_id in image_cache and len(image_cache[item_id]) > 0:
+                images_list = image_cache[item_id]
+            else:
+                # سحب 6 صور حقيقية للمنتجات الجديدة فقط
+                brand = item.get('brand', '')
+                model = item.get('model', '')
+                print(f"🔍 سحب صور لـ: {brand} {model}")
+                
+                images_list = scraper.get_real_images(brand, model)
+                image_cache[item_id] = images_list
+                new_search_count += 1
+                
+                # تأخير بسيط جداً لمنع الحظر (كل 10 منتجات)
+                if new_search_count % 10 == 0:
+                    time.sleep(1)
+
+            # إضافة المصفوفة لعمود 'image' بشكل JSON نصي [link1, link2...]
+            item['image'] = json.dumps(images_list, ensure_ascii=False)
+            final_list.append(item)
+
+        # 3. حفظ الذاكرة المحدثة
+        if new_search_count > 0:
+            save_cache(image_cache)
+            print(f"✅ تم تحديث {new_search_count} منتج جديد.")
+
+        # 4. تحويل لـ DataFrame وتنظيف الأعمدة
+        df = pd.DataFrame(final_list)
         
-        # إذا كان الـ Processor بيعطينا لستة روابط صور في عمود 'image_links'
-        if 'image_links' in df.columns:
-            # نأخذ أول 6 صور فقط ونحولها لنص بتنسيق مصفوفة JSON [link1, link2, ...]
-            df['image'] = df['image_links'].apply(
-                lambda x: json.dumps(x[:6]) if isinstance(x, list) else json.dumps([])
-            )
-        else:
-            # إذا ما في روابط صور جاهزة، بنعمل عمود فاضي بتنسيق مصفوفة
-            df['image'] = "[]"
-
-        # --- [ تنظيف الملف للموقع ] ---
-
-        # حذف الأعمدة اللي ما بدو إياها المدير (المرجع، الماتريال، النوت)
+        # حذف الأعمدة الممنوعة (الماتريال، النوت، وأي روابط قديمة)
         cols_to_drop = [
             'material', 'note', 'band-material', 'band_material', 
-            'HS_Reference_Link', 'image_search_link', 'image_links'
-        ] 
-        existing_drops = [c for c in cols_to_drop if c in df.columns]
-        df_site = df.drop(columns=existing_drops)
+            'image_search_link', 'image_links'
+        ]
+        df_final = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
 
-        # حفظ كـ CSV للموقع
-        file_name = "Across_MENA_Array_Images.csv"
-        df_site.to_csv(file_name, index=False, encoding='utf-8-sig')
+        # 5. تصدير الملف النهائي CSV
+        file_name = "Across_MENA_Full_Report.csv"
+        df_final.to_csv(file_name, index=False, encoding='utf-8-sig')
 
-        # الرفع والتقرير
-        web_status = post_to_website(file_name)
-        report = (
-            f"📢 تحديث Across MENA (تنسيق المصفوفة)\n"
+        # 6. إرسال التقرير والملف لتليجرام
+        bot_token = os.getenv("BOT_TOKEN")
+        chat_id = os.getenv("CHAT_ID")
+        
+        report_msg = (
+            f"📢 تقرير Across MENA اليومي\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"🔹 الوضع: {web_status}\n"
-            f"🔹 المواد: {len(df_site)}\n"
-            f"🔹 الصور: تم دمج 6 روابط في مصفوفة واحدة داخل عمود image\n"
-            f"🔹 المرجع: محذوف بناءً على طلب المدير"
+            f"🔹 عدد المواد: {len(df_final)}\n"
+            f"🔹 تحديث صور: {new_search_count} منتج جديد\n"
+            f"🔹 الوضع: تم دمج الـ HS Code مع مصفوفة الصور"
         )
         
-        send_telegram(report, file_name)
-        if os.path.exists(file_name): os.remove(file_name)
+        # إرسال النص
+        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", 
+                      data={'chat_id': chat_id, 'text': report_msg})
+        
+        # إرسال ملف الـ CSV
+        with open(file_name, 'rb') as f:
+            requests.post(f"https://api.telegram.org/bot{bot_token}/sendDocument", 
+                          data={'chat_id': chat_id}, files={'document': f})
 
     except Exception as e:
-        send_telegram(f"❌ خطأ: {str(e)}")
+        print(f"❌ خطأ في النظام: {e}")
 
 if __name__ == "__main__":
     main()
