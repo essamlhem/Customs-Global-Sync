@@ -1,74 +1,42 @@
-import os
 import requests
-import pandas as pd
-import json
-import time
-from datetime import datetime
-from Scraper import SupabaseScraper
 
-CACHE_FILE = "images_cache.json"
+class SupabaseScraper:
+    def __init__(self):
+        # الرابط المباشر
+        self.api_url = "https://xlugavhmvnmagaxtcdxy.supabase.co/rest/v1/bands?select=id,brand,model,hs_code"
+        self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA"
 
-def load_cache():
-    if os.path.exists(CACHE_FILE):
+    def fetch_raw_data(self):
+        """جلب البيانات الأساسية فقط لتقليل استهلاك الـ Egress Quota"""
+        headers = {
+            'apikey': self.key.strip(), 
+            'Authorization': f'Bearer {self.key.strip()}',
+            'Content-Type': 'application/json'
+        }
         try:
-            with open(CACHE_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-        except: return {}
-    return {}
+            response = requests.get(self.api_url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"✅ تم جلب {len(data)} مادة بنجاح")
+                return data
+            else:
+                print(f"❌ خطأ سوبابيس {response.status_code}: {response.text}")
+                return []
+        except Exception as e:
+            print(f"⚠️ فشل الاتصال: {e}")
+            return []
 
-def save_cache(cache):
-    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-        json.dump(cache, f, ensure_ascii=False, indent=4)
-
-def main():
-    print(f"🚀 بدء معالجة البيانات: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    scraper = SupabaseScraper()
-    image_cache = load_cache()
-    
-    # جلب البيانات (استخدام الاسم الصحيح للدالة)
-    raw_data = scraper.fetch_raw_data()
-    
-    if not raw_data:
-        print("⚠️ لم يتم جلب أي مواد. توقف التشغيل.")
-        return
-
-    final_list = []
-    new_images_count = 0
-    total_items = len(raw_data)
-
-    for index, item in enumerate(raw_data):
-        item_id = str(item.get('id', index))
-        
-        if item_id in image_cache and len(image_cache[item_id]) > 0:
-            item_images = image_cache[item_id]
-        else:
-            brand = item.get('brand', '')
-            model = item.get('model', '')
-            print(f"🔍 [{index+1}/{total_items}] سحب صور لـ: {brand} {model}")
-            item_images = scraper.get_real_images(brand, model)
-            image_cache[item_id] = item_images
-            new_images_count += 1
-            if new_images_count % 20 == 0:
-                save_cache(image_cache)
-                time.sleep(1)
-
-        item['image_urls'] = item_images
-        final_list.append(item)
-
-    save_cache(image_cache)
-    df = pd.DataFrame(final_list)
-    cols_to_drop = ['material', 'note', 'band-material', 'band_material', 'image_search_link']
-    df_final = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
-    
-    file_name = "Across_MENA_Report.csv"
-    df_final.to_csv(file_name, index=False, encoding='utf-8-sig')
-
-    bot_token = os.getenv("BOT_TOKEN")
-    chat_id = os.getenv("CHAT_ID")
-    if bot_token and chat_id:
-        msg = f"✅ تحديث مكتمل\n📦 المواد: {len(df_final)}\n📸 صور جديدة: {new_images_count}"
-        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", data={'chat_id': chat_id, 'text': msg})
-        with open(file_name, 'rb') as f:
-            requests.post(f"https://api.telegram.org/bot{bot_token}/sendDocument", data={'chat_id': chat_id}, files={'document': f})
-
-if __name__ == "__main__":
-    main()
+    def get_real_images(self, brand, model):
+        """دالة الصور الذكية"""
+        query = f"{brand} {model} watch"
+        search_url = "https://duckduckgo.com/i.js"
+        params = {'q': query, 'o': 'json', 'v': '1'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        try:
+            response = requests.get(search_url, params=params, headers=headers, timeout=10)
+            if response.status_code == 200:
+                results = response.json().get('results', [])
+                links = [r.get('image') for r in results if r.get('image') and any(r.get('image').lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png'])]
+                return links[:6]
+        except: pass
+        return []
