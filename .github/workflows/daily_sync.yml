@@ -1,16 +1,15 @@
-name: Daily Sync and Image Search
+name: Hourly Sync
 
 on:
   schedule:
-    - cron: '0 5 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
   run-sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v3
 
       - name: Setup Python
@@ -18,18 +17,20 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Cache Image Links
+      - name: Cache Data
         uses: actions/cache@v3
         with:
-          path: images_cache.json
-          key: ${{ runner.os }}-images-v3 # تغيير المفتاح لضمان بداية نظيفة
+          path: |
+            images_cache.json
+            data_backup.json
+          key: ${{ runner.os }}-sync-v5
           restore-keys: |
-            ${{ runner.os }}-images-
+            ${{ runner.os }}-sync-
 
-      - name: Install Dependencies
+      - name: Install
         run: pip install pandas requests
 
-      - name: Run Main Script
+      - name: Run
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
