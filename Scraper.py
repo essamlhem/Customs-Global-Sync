@@ -3,31 +3,35 @@ import os
 
 class SupabaseScraper:
     def __init__(self):
-        # الرابط الأساسي بدون الـ parameters
+        # الرابط الأساسي
         self.base_url = "https://xlugavhmvnmagaxtcdxy.supabase.co/rest/v1/bands"
         self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA"
 
-    def fetch_raw_data_batched(self, offset=0, limit=500):
-        """جلب البيانات من سوبابيس على دفعات لتجنب خطأ الـ 402"""
+    def fetch_raw_data_batched(self, offset=0, limit=1000):
+        """جلب البيانات باستخدام Offset و Limit في الرابط مباشرة"""
         headers = {
             'apikey': self.key.strip(), 
             'Authorization': f'Bearer {self.key.strip()}',
-            'Range': f'{offset}-{offset + limit - 1}' # ميزة سوبابيس لجلب نطاق معين
+            'Content-Type': 'application/json'
         }
-        # نطلب البيانات مرتبة حسب الـ id عشان ما يتكرر شي
-        url = f"{self.base_url}?select=%2A&order=id.asc"
+        # وضعنا الـ limit والـ offset جوا الرابط (أضمن طريقة لسوبابيس)
+        url = f"{self.base_url}?select=%2A&order=id.asc&limit={limit}&offset={offset}"
         
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        elif response.status_code == 206: # 206 تعني Partial Content وهي طبيعية هنا
-            return response.json()
-        else:
-            print(f"⚠️ فشل جلب الدفعة: {response.status_code}")
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                print(f"✅ جلب {len(data)} مادة (بداية من {offset})")
+                return data
+            else:
+                print(f"❌ خطأ {response.status_code}: {response.text}")
+                return []
+        except Exception as e:
+            print(f"⚠️ فشل الاتصال: {e}")
             return []
 
     def get_real_images(self, brand, model):
-        """نفس دالة جلب الـ 6 صور اللي عملناها"""
+        """دالة الصور كما هي"""
         query = f"{brand} {model} watch"
         search_url = "https://duckduckgo.com/i.js"
         params = {'q': query, 'o': 'json', 'v': '1'}
