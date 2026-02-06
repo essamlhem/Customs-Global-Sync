@@ -8,6 +8,8 @@ on:
 jobs:
   run-sync:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # ضروري عشان يقدر يرفع ملف الكاش المحدث
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -17,21 +19,19 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Cache Data
-        uses: actions/cache@v3
-        with:
-          path: |
-            images_cache.json
-            data_backup.json
-          key: ${{ runner.os }}-sync-v5
-          restore-keys: |
-            ${{ runner.os }}-sync-
-
-      - name: Install
+      - name: Install Dependencies
         run: pip install pandas requests
 
-      - name: Run
+      - name: Run Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
+
+      - name: Save Cache to Repo
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add images_cache.json data_backup.json
+          git commit -m "Update cache [skip ci]" || echo "No changes to commit"
+          git push
