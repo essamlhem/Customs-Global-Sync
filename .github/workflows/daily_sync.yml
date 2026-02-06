@@ -2,17 +2,13 @@ name: Daily Sync and Image Search
 
 on:
   schedule:
-    # يشتغل تلقائياً الساعة 8 صباحاً بتوقيت مكة (5 UTC)
     - cron: '0 5 * * *'
-  workflow_dispatch: # يتيح لك تشغيله يدوياً بضغطة زر
+  workflow_dispatch:
 
 jobs:
   run-sync:
     runs-on: ubuntu-latest
-    
-    # زيادة مدة التشغيل المسموحة (اختياري، جيت هب يغلق تلقائياً بعد 6 ساعات)
-    timeout-minutes: 360 
-
+    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -22,25 +18,19 @@ jobs:
         with:
           python-version: '3.9'
 
-      # --- الجزء الأهم: حفظ واسترجاع الذاكرة (Cache) ---
       - name: Cache Image Links
         uses: actions/cache@v3
         with:
           path: images_cache.json
-          # المفتاح "v2" لضمان عدم الخلط مع أي ملفات قديمة تالفة
-          key: ${{ runner.os }}-images-v2 
+          key: ${{ runner.os }}-images-v3 # تغيير المفتاح لضمان بداية نظيفة
           restore-keys: |
             ${{ runner.os }}-images-
 
       - name: Install Dependencies
-        run: |
-          pip install pandas requests
+        run: pip install pandas requests
 
       - name: Run Main Script
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
-
-      # ملاحظة: جيت هب سيقوم بحفظ الـ images_cache.json تلقائياً عند نهاية العملية 
-      # حتى لو فشلت العملية بسبب الوقت (Timeout).
