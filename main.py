@@ -1,42 +1,71 @@
+import os
 import requests
+import pandas as pd
+import json
+import time
+from datetime import datetime
+from Scraper import SupabaseScraper
 
-class SupabaseScraper:
-    def __init__(self):
-        # الرابط المباشر
-        self.api_url = "https://xlugavhmvnmagaxtcdxy.supabase.co/rest/v1/bands?select=id,brand,model,hs_code"
-        self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA"
+CACHE_FILE = "images_cache.json"
 
-    def fetch_raw_data(self):
-        """جلب البيانات الأساسية فقط لتقليل استهلاك الـ Egress Quota"""
-        headers = {
-            'apikey': self.key.strip(), 
-            'Authorization': f'Bearer {self.key.strip()}',
-            'Content-Type': 'application/json'
-        }
+def load_cache():
+    if os.path.exists(CACHE_FILE):
         try:
-            response = requests.get(self.api_url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                print(f"✅ تم جلب {len(data)} مادة بنجاح")
-                return data
-            else:
-                print(f"❌ خطأ سوبابيس {response.status_code}: {response.text}")
-                return []
-        except Exception as e:
-            print(f"⚠️ فشل الاتصال: {e}")
-            return []
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f: return json.load(f)
+        except: return {}
+    return {}
 
-    def get_real_images(self, brand, model):
-        """دالة الصور الذكية"""
-        query = f"{brand} {model} watch"
-        search_url = "https://duckduckgo.com/i.js"
-        params = {'q': query, 'o': 'json', 'v': '1'}
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        try:
-            response = requests.get(search_url, params=params, headers=headers, timeout=10)
-            if response.status_code == 200:
-                results = response.json().get('results', [])
-                links = [r.get('image') for r in results if r.get('image') and any(r.get('image').lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png'])]
-                return links[:6]
-        except: pass
-        return []
+def save_cache(cache):
+    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, ensure_ascii=False, indent=4)
+
+def main():
+    print(f"🚀 بدء التشغيل: {datetime.now()}")
+    scraper = SupabaseScraper()
+    image_cache = load_cache()
+    
+    # مناداة الدالة الصحيحة لتجنب AttributeError
+    raw_data = scraper.fetch_raw_data()
+    
+    if not raw_data:
+        print("⚠️ لم يتم جلب مواد. احتمال الـ Quota انتهت لليوم.")
+        return
+
+    final_list = []
+    new_count = 0
+    total = len(raw_data)
+
+    for index, item in enumerate(raw_data):
+        item_id = str(item.get('id', index))
+        
+        if item_id in image_cache and len(image_cache[item_id]) > 0:
+            imgs = image_cache[item_id]
+        else:
+            print(f"🔍 [{index+1}/{total}] جاري البحث عن صور...")
+            imgs = scraper.get_real_images(item.get('brand', ''), item.get('model', ''))
+            image_cache[item_id] = imgs
+            new_count += 1
+            if new_count % 20 == 0:
+                save_cache(image_cache)
+                time.sleep(1)
+
+        item['image_urls'] = imgs
+        final_list.append(item)
+
+    save_cache(image_cache)
+    
+    df = pd.DataFrame(final_list)
+    file_name = "Across_MENA_Final_Report.csv"
+    df.to_csv(file_name, index=False, encoding='utf-8-sig')
+
+    # إرسال تليجرام
+    bot_token = os.getenv("BOT_TOKEN")
+    chat_id = os.getenv("CHAT_ID")
+    if bot_token and chat_id:
+        msg = f"✅ اكتمل التحديث\n📦 المواد: {len(df)}\n📸 صور جديدة: {new_count}"
+        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", data={'chat_id': chat_id, 'text': msg})
+        with open(file_name, 'rb') as f:
+            requests.post(f"https://api.telegram.org/bot{bot_token}/sendDocument", data={'chat_id': chat_id}, files={'document': f})
+
+if __name__ == "__main__":
+    main()
