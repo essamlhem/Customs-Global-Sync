@@ -2,12 +2,12 @@ import requests
 
 class SupabaseScraper:
     def __init__(self):
-        # الرابط المباشر لجلب كافة البيانات
+        # الرابط المباشر لجلب كافة البيانات دفعة واحدة
         self.api_url = "https://xlugavhmvnmagaxtcdxy.supabase.co/rest/v1/bands?select=*"
         self.key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA"
 
     def fetch_raw_data(self):
-        """جلب كل البيانات بطلبة واحدة لتفادي مشاكل الدفعات (Offsets)"""
+        """جلب كل البيانات بطلبة واحدة لتفادي مشاكل الـ 402 والـ Offsets"""
         headers = {
             'apikey': self.key.strip(), 
             'Authorization': f'Bearer {self.key.strip()}',
@@ -20,7 +20,7 @@ class SupabaseScraper:
                 print(f"✅ تم جلب {len(data)} مادة من Supabase")
                 return data
             else:
-                print(f"❌ خطأ في جلب البيانات: {response.status_code}")
+                print(f"❌ خطأ {response.status_code}: {response.text}")
                 return []
         except Exception as e:
             print(f"⚠️ فشل الاتصال بسوبابيس: {e}")
@@ -39,11 +39,9 @@ class SupabaseScraper:
                 links = []
                 for r in results:
                     img = r.get('image')
-                    # التأكد من امتداد الصورة
                     if img and any(img.lower().endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.webp']):
                         links.append(img)
                     if len(links) == 6: break
                 return links
-        except:
-            pass
+        except: pass
         return []
