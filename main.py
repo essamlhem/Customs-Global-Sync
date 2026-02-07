@@ -7,16 +7,9 @@ import json
 # الإعدادات
 UPLOAD_URL = "https://across-mena.com/customs/upload-batch/"
 INPUT_FILE = "Across_MENA_Daily_Report.xlsx"
-BATCH_SIZE = 500  # جرب تصغرها لـ 100 لو استمر الخطأ 500
 TOKEN = "OJLEh-Zb-o9DbQWt9J3cu7wJBWGUJvSeCkUPGa5H6"
 
-def upload_to_backend(df_batch, batch_num):
-    # تحويل البيانات لـ JSON Records
-    json_data = df_batch.to_dict(orient='records')
-    
-    # تحويل أي قيم غير مدعومة (مثل التواريخ أو الأرقام الغريبة) لنصوص صافية
-    clean_json = json.loads(json.dumps(json_data, default=str))
-
+def upload_row(row_data, row_num):
     headers = {
         "Authorization": f"Bearer {TOKEN}",
         "Content-Type": "application/json",
@@ -24,47 +17,51 @@ def upload_to_backend(df_batch, batch_num):
     }
     
     try:
-        print(f"🚀 رفع الدفعة {batch_num}...")
-        # طباعة عينة من البيانات المرسلة للتأكد (أول سطر فقط)
-        print(f"📝 عينة من البيانات: {clean_json[0]}")
-        
-        response = requests.post(UPLOAD_URL, json=clean_json, headers=headers, timeout=60)
+        # إرسال سطر واحد فقط كـ Dictionary
+        response = requests.post(UPLOAD_URL, json=row_data, headers=headers, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"✅ الدفعة {batch_num} وصلت بنجاح!")
+            print(f"✅ السطر {row_num} تم رفعه بنجاح.")
+            return True
         else:
-            print(f"❌ خطأ {response.status_code}")
-            print(f"💬 الرد: {response.text[:500]}") # طباعة أول 500 حرف من الخطأ
+            print(f"❌ فشل السطر {row_num}: كود {response.status_code}")
+            return False
                 
     except Exception as e:
-        print(f"❌ فشل: {e}")
+        print(f"❌ خطأ تقني في السطر {row_num}: {e}")
+        return False
 
 def main():
     if not os.path.exists(INPUT_FILE):
-        print(f"❌ الملف مفقود!")
+        print(f"❌ الملف {INPUT_FILE} غير موجود!")
         return
 
+    print("📂 جاري معالجة الملف للرفع سطر بسطر...")
     df = pd.read_excel(INPUT_FILE)
 
-    # حذف material و note
-    # ملاحظة: إذا الباك إيند بيطلب أعمدة معينة بالاسم، لازم تتطابق بالظبط
-    df.columns = [str(c).strip() for c in df.columns] # خليهم مثل ما هن بدون lower
-    
-    cols_to_drop = []
-    for c in ['material', 'note', 'Material', 'Note']:
-        if c in df.columns: cols_to_drop.append(c)
-    
-    df.drop(columns=cols_to_drop, inplace=True)
-    print(f"🗑️ تم تنظيف الأعمدة: {cols_to_drop}")
+    # تنظيف الأعمدة
+    df.columns = [str(c).strip() for c in df.columns]
+    for col in ['material', 'note', 'Material', 'Note']:
+        if col in df.columns:
+            df.drop(columns=[col], inplace=True)
 
-    # تحويل كل القيم لـ String عشان نتفادى خطأ الـ 500 في السيرفر
-    df = df.astype(str).replace('nan', '')
+    # تحويل كل شيء لنصوص ومعالجة الفراغات
+    df = df.fillna("").astype(str)
 
-    total_rows = len(df)
-    for i in range(0, total_rows, BATCH_SIZE):
-        batch_df = df.iloc[i:i + BATCH_SIZE]
-        upload_to_backend(batch_df, (i // BATCH_SIZE) + 1)
-        time.sleep(2)
+    # تحويل البيانات لقائمة من القواميس
+    rows = df.to_dict(orient='records')
+    total_rows = len(rows)
+    print(f"📊 إجمالي الأسطر المطلوب رفعها: {total_rows}")
+
+    success_count = 0
+    for i, row in enumerate(rows):
+        if upload_row(row, i + 1):
+            success_count += 1
+        
+        # استراحة بسيطة جداً عشان ما نهجم على السيرفر
+        time.sleep(0.1) 
+
+    print(f"\n🚀 انتهت العملية! تم رفع {success_count} من أصل {total_rows}.")
 
 if __name__ == "__main__":
     main()
