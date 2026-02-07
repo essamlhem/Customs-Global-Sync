@@ -20,7 +20,7 @@ jobs:
           python-version: '3.9'
 
       - name: Install Dependencies
-        run: pip install pandas requests duckduckgo_search
+        run: pip install pandas requests duckduckgo_search typing_extensions
 
       - name: Run Script
         run: python main.py
