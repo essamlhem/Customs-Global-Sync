@@ -1,15 +1,13 @@
-name: Daily Morning Monitor
+name: Auto Batch Upload
 
 on:
-  schedule:
-    - cron: '0 6 * * *' # الساعة 6 صباحاً جرينتش = 9 صباحاً توقيت مكة/دمشق
-  workflow_dispatch: # زر للتشغيل اليدوي للتجربة
+  workflow_dispatch: # هذا السطر هو اللي بيظهر لك الزر اليدوي
 
 jobs:
-  check_and_update:
+  run_upload:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -17,16 +15,9 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install Dependencies
-        run: pip install requests pandas
-
-      - name: Run Monitor Script
-        run: python main.py
-
-      - name: Push Changes to GitHub
+      - name: Install dependencies
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add Across_MENA_Full_Data.csv data_hash.txt
-          git commit -m "Daily Sync: Update CSV and Hash [skip ci]" || exit 0
-          git push
+          pip install pandas openpyxl requests
+
+      - name: Execute Upload Script
+        run: python main.py
