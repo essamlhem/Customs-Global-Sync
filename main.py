@@ -8,12 +8,23 @@ from Scraper import SupabaseScraper
 
 CACHE_FILE = "images_cache.json"
 
+def git_push_progress(count):
+    """وظيفة لرفع التقدم لـ GitHub تلقائياً"""
+    try:
+        os.system('git config --local user.email "action@github.com"')
+        os.system('git config --local user.name "GitHub Action"')
+        os.system(f'git add {CACHE_FILE} data.csv Across_MENA_Final_Report.csv')
+        os.system(f'git commit -m "حفظ تلقائي: تم إنجاز {count} صورة جديدة"')
+        os.system('git push')
+        print(f"☁️ [GitHub] تم رفع التقدم بنجاح (إجمالي الصور الجديدة: {count})")
+    except Exception as e:
+        print(f"⚠️ فشل الرفع لـ GitHub: {e}")
+
 def main():
     print(f"🚀 بدء التشغيل: {datetime.now()}")
     scraper = SupabaseScraper()
     csv_file = "data.csv"
     
-    # 1. قراءة البيانات المحلية
     if not os.path.exists(csv_file):
         print("❌ ملف data.csv غير موجود!")
         return
@@ -26,7 +37,7 @@ def main():
         print(f"❌ خطأ في قراءة CSV: {e}")
         return
 
-    # 2. تحميل الكاش (المواد المنجزة سابقاً)
+    # تحميل الكاش (المواد المنجزة سابقاً)
     if os.path.exists(CACHE_FILE):
         with open(CACHE_FILE, 'r', encoding='utf-8') as f:
             image_cache = json.load(f)
@@ -38,56 +49,51 @@ def main():
     new_images_count = 0
     total_items = len(raw_data)
 
-    # 3. معالجة البيانات مع خاصية الاستكمال (Resume)
     for index, item in enumerate(raw_data):
-        # معرف فريد لكل مادة
         item_id = str(item.get('id', f"{item.get('brand')}_{item.get('model')}"))
         
-        # إذا كانت المادة موجودة في الكاش وبها صور، نتخطاها
+        # تخطي إذا كان موجوداً مسبقاً
         if item_id in image_cache and image_cache[item_id]:
             item['image_urls'] = image_cache[item_id]
             final_list.append(item)
             continue
         
-        # إذا لم تكن موجودة، نبحث عن صورها
         brand = str(item.get('brand', ''))
         model = str(item.get('model', ''))
         print(f"🔍 [{index+1}/{total_items}] سحب صور لـ: {brand} {model}")
         
-        imgs = scraper.get_real_images(brand, model)
-        image_cache[item_id] = imgs
-        item['image_urls'] = imgs
-        new_images_count += 1
-        final_list.append(item)
+        try:
+            imgs = scraper.get_real_images(brand, model)
+            image_cache[item_id] = imgs
+            item['image_urls'] = imgs
+            new_images_count += 1
+            final_list.append(item)
 
-        # حفظ الكاش كل 50 صورة لضمان عدم ضياع الجهد إذا فصل السيرفر
-        if new_images_count % 50 == 0:
-            with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-                json.dump(image_cache, f, ensure_ascii=False, indent=4)
-            print(f"💾 تم حفظ تقدم مؤقت ({new_images_count} صورة جديدة)")
-            time.sleep(1) # تأخير بسيط لتجنب الحظر
+            # الحفظ المحلي والرفع لـ GitHub كل 50 صورة
+            if new_images_count > 0 and new_images_count % 50 == 0:
+                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(image_cache, f, ensure_ascii=False, indent=4)
+                
+                # حفظ التقرير المؤقت لضمان وجود الأعمدة
+                pd.DataFrame(final_list).to_csv("Across_MENA_Final_Report.csv", index=False, encoding='utf-8-sig')
+                
+                print(f"💾 حفظ مؤقت محلي لـ {new_images_count} صورة.")
+                git_push_progress(new_images_count) # الرفع لـ GitHub
+                time.sleep(2) # تأخير لتجنب أي تعليق في الـ Push
 
-    # 4. حفظ النتائج النهائية
+        except Exception as e:
+            print(f"⚠️ خطأ أثناء معالجة المادة {item_id}: {e}")
+            continue
+
+    # حفظ النتائج النهائية عند اكتمال الدورة
     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
         json.dump(image_cache, f, ensure_ascii=False, indent=4)
 
     df_final = pd.DataFrame(final_list)
-    output_file = "Across_MENA_Final_Report.csv"
-    df_final.to_csv(output_file, index=False, encoding='utf-8-sig')
+    df_final.to_csv("Across_MENA_Final_Report.csv", index=False, encoding='utf-8-sig')
+    git_push_progress(new_images_count)
 
-    # 5. إرسال إشعار تليجرام
-    bot_token = os.getenv("BOT_TOKEN")
-    chat_id = os.getenv("CHAT_ID")
-    if bot_token and chat_id:
-        done_count = len(image_cache)
-        msg = (f"⏳ تحديث العمل الدوري:\n"
-               f"✅ تم إنجاز: {done_count} من أصل {total_items}\n"
-               f"📸 صور جديدة في هذه الدورة: {new_images_count}")
-        try:
-            requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage", data={'chat_id': chat_id, 'text': msg})
-        except: pass
-
-    print(f"🏁 انتهت الدورة الحالية. المنجز الكلي: {len(image_cache)}")
+    print(f"🏁 انتهت الدورة. المنجز الكلي: {len(image_cache)}")
 
 if __name__ == "__main__":
     main()
