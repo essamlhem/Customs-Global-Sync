@@ -1,44 +1,26 @@
 import requests
 import re
 import time
-import random
-from duckduckgo_search import DDGS
 
-class SupabaseScraper:
-    def get_real_images(self, brand, model):
-        # إضافة كلمات دلالية تجارية لضمان دقة الصور
-        query = f"{brand} {model} product listing gallery".replace("nan", "").strip()
-        if not query or len(query) < 3: return []
-
-        print(f"🎯 قنص تجاري دقيق لـ: {query}")
-        
+class BingScraper:
+    def scrape_bing_images(self, url):
+        # هيدر لتمويه بينغ بأننا متصفح حقيقي
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         try:
-            time.sleep(random.uniform(3, 5))
-            with DDGS() as ddgs:
-                # نطلب من DuckDuckGo صور من مواقع التسوق فقط
-                results = list(ddgs.images(
-                    query,
-                    region="wt-wt",
-                    safesearch="off", # أحياناً الموديلات التقنية تحتاج فلاتر مفتوحة
-                    max_results=15 # نطلب عدد أكبر لنختار الأفضل
-                ))
+            # استراحة بسيطة عشان ما نكشف كـ "بوت"
+            time.sleep(2) 
+            response = requests.get(url, headers=headers, timeout=15)
+            
+            if response.status_code == 200:
+                # هذا النمط (Regex) بيبحث داخل كود الصفحة عن الروابط الأصلية للصور
+                # اللي بتنتهي بـ jpg أو png أو jpeg
+                links = re.findall(r'murl&quot;:&quot;(http.*?\.jpg|http.*?\.png|http.*?\.jpeg)', response.text)
                 
-                if results:
-                    final_urls = []
-                    for r in results:
-                        img_url = r.get('image', '')
-                        # استبعاد روابط يوتيوب وأي روابط غير موثوقة
-                        if any(x in img_url.lower() for x in ['ytimg', 'youtube', 'facebook', 'instagram', 'thumbnail']):
-                            continue
-                        
-                        final_urls.append(img_url)
-                        if len(final_urls) == 6: break
-                    
-                    if final_urls:
-                        print(f"✅ تم إيجاد {len(final_urls)} صور تجارية نظيفة.")
-                        return final_urls
-                        
+                # رح نأخذ أول 6 صور بس مثل ما طلبت
+                return links[:6]
         except Exception as e:
-            print(f"⚠️ فشل القنص: {e}")
+            print(f"❌ فشل السحب من الرابط: {e}")
             
         return []
