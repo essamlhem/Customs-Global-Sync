@@ -5,53 +5,41 @@ import time
 class SupabaseScraper:
     def __init__(self):
         self.session = requests.Session()
-        # قائمة متصفحات وهمية للتنويع وتجنب الحظر
-        self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        # متصفحات متنوعة للتمويه
+        self.agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/118.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) Chrome/119.0.0.0 Safari/537.36'
         ]
 
     def get_real_images(self, brand, model):
-        query = f"{brand} {model}".strip()
-        if not query or query == "nan nan":
-            return []
-            
-        # استخدام رابط البحث التقليدي المباشر
+        # تنظيف كلمة البحث
+        query = f"{brand} {model}".replace("nan", "").strip()
+        if len(query) < 3: return []
+
         search_url = "https://duckduckgo.com/i.js"
-        params = {
-            'q': query,
-            'o': 'json',
-            'p': '1',
-            'vqd': '', # سيتم تجاهله أو طلبه لاحقاً
-            'f': ',,,',
-            'exit': '1'
-        }
-        
+        params = {'q': query, 'o': 'json', 'v': '1', 'f': ',,,', 'p': '1'}
         headers = {
-            'User-Agent': random.choice(self.user_agents),
-            'Accept': 'application/json, text/javascript, */*; q=0.01',
-            'Referer': 'https://duckduckgo.com/',
-            'X-Requested-With': 'XMLHttpRequest'
+            'User-Agent': random.choice(self.agents),
+            'Referer': 'https://duckduckgo.com/'
         }
 
         try:
-            # إضافة تأخير بسيط جداً بين الطلبات لتجنب الحظر
-            time.sleep(random.uniform(1.5, 3.0)) 
+            # إضافة تأخير بسيط (ثانية واحدة) لتجنب الحظر
+            time.sleep(random.uniform(1.0, 2.0))
             
             response = self.session.get(search_url, params=params, headers=headers, timeout=15)
             
             if response.status_code == 200:
-                data = response.json()
-                results = data.get('results', [])
-                # سحب الروابط وتصفيتها
+                results = response.json().get('results', [])
+                # جلب روابط الصور الحقيقية
                 images = [r.get('image') for r in results if r.get('image')][:5]
                 if images:
-                    print(f"✅ لقطنا {len(images)} صور لـ: {query}")
+                    print(f"✅ تم العثور على {len(images)} صور لـ: {query}")
                 return images
             else:
-                print(f"⚠️ الموقع رفض الطلب (كود {response.status_code})")
-        except Exception as e:
-            print(f"❌ خطأ في فك تشفير البيانات: {e}")
+                print(f"⚠️ تنبيه: حظر مؤقت من محرك البحث (Status: {response.status_code})")
+        except:
+            pass
             
         return []
