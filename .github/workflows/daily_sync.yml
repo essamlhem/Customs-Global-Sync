@@ -2,19 +2,19 @@ name: 6-Hour Sync Search
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # يشتغل كل 6 ساعات
-  workflow_dispatch: # زر التشغيل اليدوي
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 jobs:
   run-sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ضروري جداً للسماح للسكريبت بالرفع التلقائي
+      contents: write # الصلاحية المطلوبة للحفظ
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0 # لجلب كامل تاريخ الملفات ومنع مشاكل الـ Push
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -29,5 +29,3 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
-
-      # ملاحظة: الكود البرمجي صار يعمل Push داخلي، فما عاد نحتاج خطوة Push هون
