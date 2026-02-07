@@ -9,12 +9,10 @@ jobs:
   run-sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # الصلاحية المطلوبة للحفظ
+      contents: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -25,7 +23,4 @@ jobs:
         run: pip install pandas requests
 
       - name: Run Script
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
