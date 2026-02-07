@@ -2,17 +2,19 @@ name: 6-Hour Sync Search
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # يشتغل كل 6 ساعات بالتمام
+    - cron: '0 */6 * * *' # يشتغل كل 6 ساعات
   workflow_dispatch: # زر التشغيل اليدوي
 
 jobs:
   run-sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ضروري جداً ليقدر يحفظ الكاش
+      contents: write # ضروري جداً للسماح للسكريبت بالرفع التلقائي
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # لجلب كامل تاريخ الملفات ومنع مشاكل الـ Push
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -28,10 +30,4 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
 
-      - name: Commit and Push Progress
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add images_cache.json Across_MENA_Final_Report.csv
-          git commit -m "حفظ التقدم التلقائي - كملنا جزء من الصور" || echo "لا توجد تغييرات للحفظ"
-          git push
+      # ملاحظة: الكود البرمجي صار يعمل Push داخلي، فما عاد نحتاج خطوة Push هون
