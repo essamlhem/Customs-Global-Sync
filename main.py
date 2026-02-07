@@ -3,17 +3,17 @@ import requests
 import os
 import time
 
-# --- الإعدادات المحدثة ---
+# --- الإعدادات ---
 UPLOAD_URL = "https://across-mena.com/customs/upload-batch/"
-INPUT_FILE = "customs_global_brain (6).xlsx" # تم تعديل اسم الملف هنا
+INPUT_FILE = "customs_global_brain (6).xlsx" 
 TOKEN = "OJLEh-Zb-o9DbQWt9J3cu7wJBWGUJvSeCkUPGa5H6"
 BATCH_SIZE = 500 
 
 def upload_to_backend(df_batch, batch_num):
-    # تحويل الدفعة لقائمة كائنات (Records)
+    # تحويل الدفعة لقائمة كائنات كما هي تماماً في الملف
     records = df_batch.to_dict(orient='records')
     
-    # تغليف البيانات في حقل "items" كما طلب السيرفر
+    # تغليف البيانات في حقل items حسب طلب السيرفر
     payload = {"items": records}
     
     headers = {
@@ -28,53 +28,36 @@ def upload_to_backend(df_batch, batch_num):
         if response.status_code in [200, 201]:
             print(f"✅ الدفعة {batch_num} اكتملت بنجاح!")
         else:
-            print(f"❌ خطأ {response.status_code} في الدفعة {batch_num}")
-            print(f"💬 رد السيرفر: {response.text}")
+            print(f"❌ خطأ {response.status_code} | الرد: {response.text}")
                 
     except Exception as e:
         print(f"❌ فشل الاتصال: {e}")
 
 def main():
     if not os.path.exists(INPUT_FILE):
-        print(f"❌ الملف {INPUT_FILE} غير موجود في المستودع!")
+        print(f"❌ الملف {INPUT_FILE} غير موجود! تأكد من رفعه بنفس الاسم.")
         return
 
-    print(f"📂 جاري قراءة الملف وتوفيق الأعمدة...")
-    # قراءة ملف الإكسل
+    print(f"📂 جاري قراءة الملف ورفعه بأسماء الأعمدة الأصلية...")
+    # قراءة الملف
     df = pd.read_excel(INPUT_FILE)
 
-    # 🔄 خريطة تحويل الأسمدة (Mapping) لتطابق الداتابيز
-    column_mapping = {
-        "id": "source_id",
-        "clearanceFeeExport": "clearance_fee_export",
-        "priceImport": "price_import",
-        "clearanceFee": "clearance_fee",
-        "priceFull": "price_full",
-        "type": "item_type",
-        "priceExport": "price_export",
-        "last_updated": "updated_from_file_at",
-        "global_verification_link": "image_urls" # أو أي حقل إضافي تراه مناسباً
-    }
-
-    # تنفيذ إعادة التسمية
-    df.rename(columns=column_mapping, inplace=True)
-
-    # تنظيف الفراغات من الأسماء
+    # تنظيف أسماء الأعمدة من أي مسافات مخفية فقط (بدون تغيير الأسماء)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # معالجة القيم الفارغة (NaN) وتحويلها لنصوص فارغة لضمان قبول السيرفر
+    # معالجة القيم الفارغة (مهمة جداً لنجاح الـ JSON)
     df = df.fillna("")
 
     total_rows = len(df)
-    print(f"📊 إجمالي البيانات الجاهزة: {total_rows} سطر.")
+    print(f"📊 إجمالي الأسطر الجاهزة: {total_rows}")
     
-    # الرفع بنظام الباتشات (المجموعات)
+    # الرفع بنظام المجموعات (Batches)
     for i in range(0, total_rows, BATCH_SIZE):
         batch_df = df.iloc[i:i + BATCH_SIZE]
         batch_num = (i // BATCH_SIZE) + 1
         upload_to_backend(batch_df, batch_num)
         
-        # استراحة بسيطة لتفادي ضغط السيرفر
+        # استراحة بسيطة للسيرفر
         time.sleep(1.5)
 
 if __name__ == "__main__":
