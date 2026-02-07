@@ -1,0 +1,30 @@
+name: Process PDF Explanation
+
+on:
+  workflow_dispatch: # تشغيل يدوي فقط لعدم استهلاك الموارد
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: pip install pdfplumber
+
+      - name: Run PDF Extractor
+        run: python extract_pdf.py
+
+      - name: Commit Results
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add customs_logic.json
+          git commit -m "إضافة بيانات الشروحات المستخرجة من PDF" || echo "No changes"
+          git push
