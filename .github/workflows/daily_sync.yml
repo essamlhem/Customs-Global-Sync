@@ -1,17 +1,17 @@
-name: Hourly Sync
+name: 6-Hour Sync Search
 
 on:
   schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
+    - cron: '0 */6 * * *' # يشتغل كل 6 ساعات بالتمام
+  workflow_dispatch: # زر التشغيل اليدوي
 
 jobs:
   run-sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # ضروري عشان يقدر يرفع ملف الكاش المحدث
+      contents: write # ضروري جداً ليقدر يحفظ الكاش
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v3
 
       - name: Setup Python
@@ -28,10 +28,10 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
         run: python main.py
 
-      - name: Save Cache to Repo
+      - name: Commit and Push Progress
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add images_cache.json data_backup.json
-          git commit -m "Update cache [skip ci]" || echo "No changes to commit"
+          git add images_cache.json Across_MENA_Final_Report.csv
+          git commit -m "حفظ التقدم التلقائي - كملنا جزء من الصور" || echo "لا توجد تغييرات للحفظ"
           git push
