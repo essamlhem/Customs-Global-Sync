@@ -1,26 +1,27 @@
 import requests
-import re
-import time
+import json
 
-class BingScraper:
-    def scrape_bing_images(self, url):
-        # هيدر لتمويه بينغ بأننا متصفح حقيقي
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+class SupabaseScraper:
+    def __init__(self):
+        # البيانات اللي أنت استخرجتها من الـ Network
+        self.url = "https://xlugavhmvnmagaxtcdxy.supabase.co/rest/v1/bands?select=%2A"
+        self.headers = {
+            "apikey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA",
+            "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhsdWdhdmhtdm5tYWdheHRjZHh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk2ODkyNzQsImV4cCI6MjA1NTI2NTI3NH0.mCJzpoVbvGbkEwLPyaPcMZJGdaSOwaSEtav85rK-dWA"
         }
+
+    def fetch_all_data(self):
         try:
-            # استراحة بسيطة عشان ما نكشف كـ "بوت"
-            time.sleep(2) 
-            response = requests.get(url, headers=headers, timeout=15)
+            print("📡 جاري سحب البيانات من Supabase...")
+            response = requests.get(self.url, headers=self.headers)
             
             if response.status_code == 200:
-                # هذا النمط (Regex) بيبحث داخل كود الصفحة عن الروابط الأصلية للصور
-                # اللي بتنتهي بـ jpg أو png أو jpeg
-                links = re.findall(r'murl&quot;:&quot;(http.*?\.jpg|http.*?\.png|http.*?\.jpeg)', response.text)
-                
-                # رح نأخذ أول 6 صور بس مثل ما طلبت
-                return links[:6]
+                data = response.json()
+                print(f"✅ تم سحب {len(data)} سجل بنجاح.")
+                return data
+            else:
+                print(f"❌ فشل السحب. كود الخطأ: {response.status_code}")
+                return None
         except Exception as e:
-            print(f"❌ فشل السحب من الرابط: {e}")
-            
-        return []
+            print(f"❌ حدث خطأ تقني: {e}")
+            return None
