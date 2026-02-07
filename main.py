@@ -2,7 +2,6 @@ import pandas as pd
 import requests
 import os
 import time
-import json
 
 # الإعدادات
 UPLOAD_URL = "https://across-mena.com/customs/upload-batch/"
@@ -17,51 +16,47 @@ def upload_row(row_data, row_num):
     }
     
     try:
-        # إرسال سطر واحد فقط كـ Dictionary
+        # إرسال سطر واحد
         response = requests.post(UPLOAD_URL, json=row_data, headers=headers, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"✅ السطر {row_num} تم رفعه بنجاح.")
+            print(f"✅ السطر {row_num}: تم الرفع.")
             return True
         else:
-            print(f"❌ فشل السطر {row_num}: كود {response.status_code}")
+            # 🔍 أهم سطر: طباعة الرد عشان نعرف شو العمود اللي ناقص
+            print(f"❌ السطر {row_num}: خطأ {response.status_code} | الرد: {response.text}")
             return False
                 
     except Exception as e:
-        print(f"❌ خطأ تقني في السطر {row_num}: {e}")
+        print(f"❌ السطر {row_num}: خطأ تقني {e}")
         return False
 
 def main():
     if not os.path.exists(INPUT_FILE):
-        print(f"❌ الملف {INPUT_FILE} غير موجود!")
+        print("❌ ملف الإكسل غير موجود!")
         return
 
-    print("📂 جاري معالجة الملف للرفع سطر بسطر...")
+    # قراءة الملف (بدون تحويل الأعمدة لـ lowercase عشان ما نغير أسماء الحقول المطلوبة)
     df = pd.read_excel(INPUT_FILE)
 
-    # تنظيف الأعمدة
+    # تنظيف المسافات من أسماء الأعمدة فقط
     df.columns = [str(c).strip() for c in df.columns]
-    for col in ['material', 'note', 'Material', 'Note']:
-        if col in df.columns:
-            df.drop(columns=[col], inplace=True)
 
-    # تحويل كل شيء لنصوص ومعالجة الفراغات
-    df = df.fillna("").astype(str)
+    # حذف الأعمدة اللي طلبتها (بندور عليها بكل الحالات)
+    for target in ['material', 'note', 'Material', 'Note']:
+        if target in df.columns:
+            df.drop(columns=[target], inplace=True)
+            print(f"🗑️ تم حذف: {target}")
 
-    # تحويل البيانات لقائمة من القواميس
+    # معالجة القيم الفارغة (مهمة جداً للباك إيند)
+    df = df.fillna("")
+
     rows = df.to_dict(orient='records')
-    total_rows = len(rows)
-    print(f"📊 إجمالي الأسطر المطلوب رفعها: {total_rows}")
+    print(f"📊 بدء رفع {len(rows)} سطر...")
 
-    success_count = 0
-    for i, row in enumerate(rows):
-        if upload_row(row, i + 1):
-            success_count += 1
-        
-        # استراحة بسيطة جداً عشان ما نهجم على السيرفر
-        time.sleep(0.1) 
-
-    print(f"\n🚀 انتهت العملية! تم رفع {success_count} من أصل {total_rows}.")
+    for i, row in enumerate(rows[:20]): # جرب أول 20 سطر بس عشان نفهم العلة
+        upload_row(row, i + 1)
+        time.sleep(0.2)
 
 if __name__ == "__main__":
     main()
