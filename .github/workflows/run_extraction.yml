@@ -6,11 +6,11 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # ضروري عشان يقدر يضيف ملفات للريبو
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }} # استخدام التوكن الافتراضي
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -23,10 +23,13 @@ jobs:
       - name: Run Script
         run: python process_customs.py
 
+      - name: Check if file exists
+        run: ls -l test_output_50.xlsx # للتأكد أن الملف انخلق فعلياً
+
       - name: Commit and Push file
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git add test_output_50.xlsx
-          git commit -m "Add extracted excel file"
-          git push
+          git commit -m "Add test output file" || echo "No changes to commit"
+          git push origin main # تأكد أن اسم الفرع عندك main (إذا كان master غيره لـ master)
