@@ -1,12 +1,13 @@
-name: Extract Customs Data
+name: Extract and Push to Repo
 
 on:
-  workflow_dispatch: # هذا يسمح لك بتشغيل الكود يدوياً بضغطة زر
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write # ضروري عشان يقدر يضيف ملفات للريبو
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -17,14 +18,15 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: |
-          pip install pdfplumber pandas openpyxl arabic-reshaper python-bidi
+        run: pip install pdfplumber pandas openpyxl arabic-reshaper python-bidi
 
-      - name: Run Extraction Script
+      - name: Run Script
         run: python process_customs.py
 
-      - name: Upload Result
-        uses: actions/upload-artifact@v3
-        with:
-          name: customs-result
-          path: final_result.xlsx
+      - name: Commit and Push file
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add test_output_50.xlsx
+          git commit -m "Add extracted excel file"
+          git push
