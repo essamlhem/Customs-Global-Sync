@@ -1,0 +1,30 @@
+name: Extract Customs Data
+
+on:
+  workflow_dispatch: # هذا يسمح لك بتشغيل الكود يدوياً بضغطة زر
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install pdfplumber pandas openpyxl arabic-reshaper python-bidi
+
+      - name: Run Extraction Script
+        run: python process_customs.py
+
+      - name: Upload Result
+        uses: actions/upload-artifact@v3
+        with:
+          name: customs-result
+          path: final_result.xlsx
