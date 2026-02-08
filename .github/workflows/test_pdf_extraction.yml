@@ -1,7 +1,7 @@
 name: Test PDF Extraction
 
 on:
-  workflow_dispatch: # تشغيل يدوي
+  workflow_dispatch:
 
 jobs:
   test_extract:
@@ -23,17 +23,56 @@ jobs:
           python -m pip install --upgrade pip
           pip install pdfplumber
 
-      - name: Run Sample Extraction
-        run: python test_extraction.py
+      - name: Create and Run Extraction Script
+        run: |
+          cat << 'EOF' > test_extraction.py
+          import pdfplumber
+          import re
+          import json
+          import os
+
+          def fix_arabic_visual(text):
+              if not text: return ""
+              # تجربة أولية: عكس النص بالكامل
+              return text[::-1]
+
+          def run_test_sample(pdf_path, pages_count=20):
+              sample_data = {}
+              code_pattern = re.compile(r'(\d{2}\.\d{2})')
+              print(f"🧐 فحص أول {pages_count} صفحات من: {pdf_path}")
+
+              if not os.path.exists(pdf_path):
+                  print(f"❌ Error: {pdf_path} not found!")
+                  return
+
+              with pdfplumber.open(pdf_path) as pdf:
+                  for i in range(min(pages_count, len(pdf.pages))):
+                      page = pdf.pages[i]
+                      text = page.extract_text()
+                      if not text: continue
+                      lines = text.split('\n')
+                      current_code = None
+                      for line in lines:
+                          match = code_pattern.search(line)
+                          if match:
+                              current_code = match.group(1).replace('.', '')
+                              sample_data[current_code] = ""
+                          if current_code:
+                              sample_data[current_code] += line + " "
+
+              final_sample = {k: fix_arabic_visual(v.strip()) for k, v in sample_data.items()}
+              with open('test_sample.json', 'w', encoding='utf-8') as f:
+                  json.dump(final_sample, f, ensure_ascii=False, indent=4)
+              print(f"✅ Success! Extracted {len(final_sample)} items.")
+
+          run_test_sample("الشروحات.pdf")
+          EOF
+          python test_extraction.py
 
       - name: Commit and Push Sample JSON
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add test_sample.json
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Add test sample from PDF [skip ci]"
-            git push
-          fi
+          git commit -m "Add test sample from PDF [skip ci]" || echo "No changes"
+          git push
