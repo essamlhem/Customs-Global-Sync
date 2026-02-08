@@ -1,67 +1,87 @@
 import pandas as pd
 import json
 import os
+import sys
 
 def fix_arabic(text):
     if not text or not isinstance(text, str):
         return ""
+    # عكس النص لتصحيح التخزين المعكوس في الـ JSON
     return text[::-1]
 
 def build_brain():
-    # تأكد أن هذه الأسماء مطابقة تماماً للملفات في المستودع
+    # أسماء الملفات كما هي في المستودع
     excel_file = 'customs_global_brain (6).xlsx'
     json_file = 'customs_logic (4).json'
     output_file = 'master_data.csv'
 
-    print(f"🔍 فحص وجود الملفات...")
+    print("--- Start Process ---")
+
+    # 1. التأكد من وجود الملفات
     if not os.path.exists(excel_file):
-        print(f"❌ خطأ: ملف الإكسل '{excel_file}' غير موجود في المجلد!")
-        return
+        print(f"❌ Error: {excel_file} not found!")
+        sys.exit(1)
     if not os.path.exists(json_file):
-        print(f"❌ خطأ: ملف الـ JSON '{json_file}' غير موجود في المجلد!")
-        return
+        print(f"❌ Error: {json_file} not found!")
+        sys.exit(1)
 
-    # 1. قراءة الإكسل
+    # 2. قراءة ملف الإكسل
     try:
+        # قراءة الملف مع تنظيف أسماء الأعمدة فوراً
         df = pd.read_excel(excel_file)
-        df.columns = [str(c).strip() for c in df.columns]
-        print(f"✅ تم تحميل الإكسل بنجاح. عدد الأسطر: {len(df)}")
+        df.columns = df.columns.astype(str).str.strip()
+        print(f"✅ Excel Loaded. Columns: {df.columns.tolist()}")
     except Exception as e:
-        print(f"❌ فشل في قراءة الإكسل: {e}")
-        return
+        print(f"❌ Excel Load Error: {e}")
+        sys.exit(1)
 
-    # 2. معالجة الرمز الجمركي
-    col_name = 'hs6_global'
-    if col_name not in df.columns:
-        print(f"❌ لم أجد عمود '{col_name}'. الأعمدة المتاحة هي: {df.columns.tolist()}")
-        return
-    
-    df[col_name] = df[col_name].astype(str).str.split('.').str[0].str.zfill(6)
+    # 3. معالجة الرمز الجمركي (HS Code)
+    # سنبحث عن العمود حتى لو اختلف اسمه قليلاً
+    target_col = 'hs6_global'
+    if target_col not in df.columns:
+        # محاولة البحث عن عمود يشبهه
+        potential_cols = [c for c in df.columns if 'hs' in c.lower()]
+        if potential_cols:
+            target_col = potential_cols[0]
+            print(f"⚠️ Column 'hs6_global' not found, using '{target_col}' instead.")
+        else:
+            print(f"❌ Error: No HS Code column found!")
+            sys.exit(1)
 
-    # 3. قراءة الـ JSON
+    # تنظيف الرموز وضمان 6 أرقام
+    df[target_col] = df[target_col].astype(str).str.replace(r'\.0$', '', regex=True).str.zfill(6)
+
+    # 4. قراءة الـ JSON وتصليحه
     try:
         with open(json_file, 'r', encoding='utf-8') as f:
-            logic_data = json.load(f)
-        fixed_logic = {str(k).strip(): fix_arabic(v) for k, v in logic_data.items()}
-        print(f"✅ تم تحميل الـ JSON وتصليح {len(fixed_logic)} شرح.")
+            raw_json = json.load(f)
+        
+        # تصليح العربي في الشروحات
+        fixed_logic = {str(k).strip(): fix_arabic(v) for k, v in raw_json.items()}
+        print(f"✅ JSON Loaded and Arabic fixed for {len(fixed_logic)} items.")
     except Exception as e:
-        print(f"❌ فشل في قراءة الـ JSON: {e}")
-        return
+        print(f"❌ JSON Load Error: {e}")
+        sys.exit(1)
 
-    # 4. الدمج
-    print("🧠 جاري دمج البيانات...")
-    df['detailed_description'] = df[col_name].apply(lambda x: fixed_logic.get(x) or fixed_logic.get(x[:4]) or "لا يوجد شرح")
+    # 5. عملية الدمج (Merging)
+    print("🧠 Merging data...")
+    def get_desc(code):
+        # البحث بالـ 6 أرقام ثم الـ 4 أرقام كخطة بديلة
+        res = fixed_logic.get(code)
+        if not res and len(code) >= 4:
+            res = fixed_logic.get(code[:4])
+        return res if res else "No description available"
 
-    # 5. حفظ الملف
+    df['detailed_description'] = df[target_col].apply(get_desc)
+
+    # 6. حفظ الملف النهائي
     try:
-        # سنحفظ كل الأعمدة عشان ما نضيع بيانات
+        # حفظ الملف بترميز يدعم العربي (utf-8-sig)
         df.to_csv(output_file, index=False, encoding='utf-8-sig')
-        if os.path.exists(output_file):
-            print(f"🎉 تم إنشاء الملف بنجاح: {output_file} (الحجم: {os.path.getsize(output_file)} bytes)")
-        else:
-            print(f"❌ فشل إنشاء الملف لسبب غير معروف.")
+        print(f"🎉 Success! {output_file} created with {len(df)} rows.")
     except Exception as e:
-        print(f"❌ خطأ أثناء حفظ الـ CSV: {e}")
+        print(f"❌ Save Error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     build_brain()
