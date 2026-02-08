@@ -1,16 +1,19 @@
 name: Extract and Push to Repo
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # تشغيل يدوياً من تبويب Actions
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # ضروري جداً للسماح للوورك فلو برفع الملفات للريبو
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }} # استخدام التوكن الافتراضي
+          fetch-depth: 0 # يجلب كامل تاريخ المشروع لتفادي أخطاء الـ Push
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -18,18 +21,24 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install pdfplumber pandas openpyxl arabic-reshaper python-bidi
+        run: |
+          pip install pdfplumber pandas openpyxl arabic-reshaper python-bidi
 
       - name: Run Script
         run: python process_customs.py
 
-      - name: Check if file exists
-        run: ls -l test_output_50.xlsx # للتأكد أن الملف انخلق فعلياً
-
       - name: Commit and Push file
         run: |
+          # إعداد بيانات المستخدم للـ Git
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add test_output_50.xlsx
-          git commit -m "Add test output file" || echo "No changes to commit"
-          git push origin main # تأكد أن اسم الفرع عندك main (إذا كان master غيره لـ master)
+          
+          # جلب آخر التحديثات ودمجها لتفادي خطأ [rejected]
+          git pull origin main --rebase
+          
+          # إضافة الملف الناتج (تأكد أن الاسم مطابق للي في كود البايثون)
+          git add test_output_full_search.xlsx
+          
+          # حفظ التغييرات ورفعها
+          git commit -m "Add extracted customs description file" || echo "No changes to commit"
+          git push origin main
