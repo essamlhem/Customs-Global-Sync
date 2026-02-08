@@ -1,0 +1,37 @@
+name: Build Master Brain Data
+
+on:
+  workflow_dispatch: # تشغيل يدوي عند الضغط على Run Workflow
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # نمنح الأكشن صلاحية الكتابة لحفظ الملف الناتج في المستودع
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl
+
+      - name: Build Master Brain (Clean & Merge)
+        run: python build_brain.py
+
+      - name: Commit and Push Master Data
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add master_data.csv
+          # لن يقوم بالرفع إلا إذا حدث تغيير في الملف
+          git commit -m "Update Master Brain Data [skip ci]" || echo "No changes to commit"
+          git push
