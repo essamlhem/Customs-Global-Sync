@@ -7,7 +7,7 @@ import time
 UPLOAD_URL = "https://across-mena.com/customs/upload-batch/"
 INPUT_FILE = "customs_global_brain_translated.xlsx" 
 TOKEN = "OJLEh-Zb-o9DbQWt9J3cu7wJBWGUJvSeCkUPGa5H6"
-BATCH_SIZE = 500 
+BATCH_SIZE = 250 
 
 def upload_to_backend(df_batch, batch_num):
     records = df_batch.to_dict(orient='records')
