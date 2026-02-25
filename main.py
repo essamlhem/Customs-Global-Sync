@@ -5,7 +5,7 @@ import time
 
 # --- الإعدادات ---
 UPLOAD_URL = "https://across-mena.com/customs/upload-batch/"
-INPUT_FILE = "customs_global_brain (6).xlsx" 
+INPUT_FILE = "customs_global_brain_translated.xlsx" 
 TOKEN = "OJLEh-Zb-o9DbQWt9J3cu7wJBWGUJvSeCkUPGa5H6"
 BATCH_SIZE = 500 
 
